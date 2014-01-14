@@ -1,0 +1,36 @@
+{
+    "name": "osg",
+    "version": "0.0.2",
+    "description": "nodejs client libraries for Open Science Grid",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/soichih/node-osg"
+    },
+    "keywords": [
+        "htcondor",
+        "condor",
+        "osg"
+    ],
+    "author": "Soichi Hayashi",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/soichih/node-osg/issues"
+    },
+    "dependencies": {
+        "htcondor": "latest",
+        "tmp": "latest",
+        "temp": "latest",
+        "merge": "latest",
+        "socket.io": "latest",
+        "socket.io-client": "latest",
+        "express": "latest",
+        "cookie": "latest",
+        "connect": "latest",
+        "async": "latest",
+        "promise": "latest"
+    }
+}

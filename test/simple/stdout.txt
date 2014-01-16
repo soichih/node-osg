@@ -1,6 +1,8 @@
-[ '/var/lib/condor/execute/dir_17346/node',
-  '/var/lib/condor/execute/dir_17346/condor_exec.exe',
-  'node',
-  'osg-submit',
-  'node',
-  'job.js' ]
+I am osg-submit.js
+running
+[ './node', 'job.js' ]
+here is my job
+creating an array
+reducing to 1 sum
+4950
+processed ended code:0 signal:null

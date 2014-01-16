@@ -58,7 +58,7 @@ exports.submit = function(options) {
         //universe: "local",
 
         executable: __dirname+"/osg-submit.js",
-        arguments: "node osg-submit "+options.run,
+        arguments: options.run,
         notification: "never",
 
         shouldtransferfiles: "yes",

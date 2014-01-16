@@ -1,16 +1,24 @@
-var osg = require('./index.js');
+var osg = require('../../index.js');
 
 var job = osg.submit({
-    input: 'job.js',
+    input: ['job.js'],
     run: 'node job.js',
-    output: 'ouput.txt',
+    stdout: 'stdout.txt',
+    stderr: 'stderr.txt',
 });
-job.progress(function() {
+job.submit(function(p) {
+    console.log("job submitted");
+    console.dir(p);
+}).progress(function(p) {
     console.log("job making progress");
-}).success(function() {
+    console.dir(p);
+}).success(function(p) {
     console.log("job fisnished successfully");
-}).failed(function() {
+    console.dir(p);
+}).failed(function(p) {
     console.log("job failed");
+    console.dir(p);
 }).evicted(function() {
     console.log("job evicted");
+    console.dir(p);
 });

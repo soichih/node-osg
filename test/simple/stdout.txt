@@ -1,0 +1,6 @@
+[ '/var/lib/condor/execute/dir_17346/node',
+  '/var/lib/condor/execute/dir_17346/condor_exec.exe',
+  'node',
+  'osg-submit',
+  'node',
+  'job.js' ]

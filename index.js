@@ -1,44 +1,105 @@
 var htcondor = require('htcondor');
 var Promise = require('promise');
 
-function Instance() {
-    var callbacks = {
-        _progress: [],
-        _success: [],
-        _failed: [],
-        _evicted: [],
-    };
-    return {
-    progress: function(call) {callbacks._progress.push(call); return this;},
-    success: function(call) {callbacks._success.push(call); return this;},
-    failed: function(call) {callbacks._failed.push(call); return this;},
-    evicted: function(call) {callbacks._evicted.push(call); return this;},
+var Job = function() {
+    this.callbacks =  {
+        submit: [],
+        progress: [],
+        success: [],
+        failed: [],
+        evicted: [],
     }
 };
+Job.prototype = {
+    submit: function(call) {this.callbacks.submit.push(call); return this;},
+    call_submit: function(res) {
+        this.callbacks.submit.forEach(function(call) {
+            call(res);
+        });
+    },
 
-exports.submit = function(job) {
-    var instance = new Instance();
+    progress: function(call) {this.callbacks.progress.push(call); return this;},
+    call_progress: function(res) {
+        this.callbacks.progress.forEach(function(call) {
+            call(res);
+        });
+    },
+
+    success: function(call) {this.callbacks.success.push(call); return this;},
+    call_success: function(res) {
+        this.callbacks.success.forEach(function(call) {
+            call(res);
+        });
+    },
+
+    failed: function(call) {this.callbacks.failed.push(call); return this;},
+    call_failed: function(res) {
+        this.callbacks.failed.forEach(function(call) {
+            call(res);
+        });
+    },
+
+    evicted: function(call) {this.callbacks.evicted.push(call); return this;},
+    call_evicted: function(res) {
+        this.callbacks.evicted.forEach(function(call) {
+            call(res);
+        });
+    },
+};
+
+exports.submit = function(options) {
+    var job = new Job();
+
+    options.input.push(process.execPath);
+    //options.input.push(__dirname+"/osg-submit.js");
+
     htcondor.submit({
-            universe: "vanilla",
-            //universe: "local",
+        universe: "vanilla",
+        //universe: "local",
 
-            executable: process.execPath,
-            argument: job.run,
-            //notification: "never",
+        executable: __dirname+"/osg-submit.js",
+        arguments: "node osg-submit "+options.run,
+        notification: "never",
 
-            shouldtransferfiles: "yes",
-            when_to_transfer_output: "ON_EXIT",
-            input: job.input,
-            output: job.output,
-            error: "test.out",
+        shouldtransferfiles: "yes",
+        when_to_transfer_output: "ON_EXIT",
+        transfer_input_files: options.input,
+        output: options.stdout,
+        error: options.stderr,
 
-            "+ProjectName": "CSIU",
-            queue: 1
-    }, function(props) {
-        console.log("got prop");
-        console.dir(props);
-        instance._progress(props);
+        "+ProjectName": "CSIU",
+        queue: 1
+    }).then(function(joblog) {
+        //subscribe to joblog event
+        joblog.event(function(event) {
+            switch(event.MyType) {
+            case "SubmitEvent":
+                job.call_submit(event);
+                break;
+            case "ExecuteEvent":
+                job.call_progress(event);
+                break;
+            case "JobImageSizeEvent":
+                job.call_progress(event);
+                break;
+            case "JobTerminatedEvent":
+                if(event.ReturnValue == 0) {
+                    job.call_success(event);
+                } else {
+                    job.call_failed(event);
+                }
+                joblog.unwatch();
+                break;
+            default:
+                console.log("unknown event type:"+event.MyType);
+                console.dir(event);
+            }
+        });
+        //job.call_progress(props);
+    }).done(function(err) {
+        if(err) throw err;
     });
-    return instance;
+
+    return job;
 }
 

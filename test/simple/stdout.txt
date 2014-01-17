@@ -1,8 +1,0 @@
-I am osg-submit.js
-running
-[ './node', 'job.js' ]
-here is my job
-creating an array
-reducing to 1 sum
-4950
-processed ended code:0 signal:null

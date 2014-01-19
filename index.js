@@ -83,6 +83,7 @@ exports.init = function(options, callback) {
 exports.submit = function(options, callbacks) {
     //initialize
     async.parallel([
+        /*
         //send git executable
         function(next) {
             which('git', function(err, path) {
@@ -94,6 +95,7 @@ exports.submit = function(options, callbacks) {
                 }
             });
         },
+        */
         //create tmp stdout
         function(next) {
             if(options.stdout) {

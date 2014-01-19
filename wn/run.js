@@ -5,9 +5,7 @@ var exec = require('child_process').exec;
 console.log("I am run.js");
 
 //ignore first 2 since it's node / condor.exec
-//var options = process.argv.slice(2);
-function run(cmd) {
-    /*
+function run(options) {
     condor_submit = spawn(options[0], options.slice(1));//, {cwd: __dirname});
     condor_submit.stdout.on('data', function (data) {
         process.stdout.write(data);
@@ -22,7 +20,7 @@ function run(cmd) {
         console.error("spawning error");
         console.error(err);
     });
-    */
+    /*
     job = exec(cmd, {
         encoding: 'utf8',
         timeout: 0, //in milliseconds
@@ -38,11 +36,13 @@ function run(cmd) {
         }
         //TODO - what to do now?
     });
+    */
 };
 
-var cmd = process.argv.slice(2).join(" ");
-console.log("running: "+cmd);
-run(cmd);
+var options = process.argv.slice(2);
+//var cmd = process.argv.slice(2).join(" ");
+console.log("running: "+options);
+run(options);
 
 //console.dir(options);
 //console.dir(process.env);

@@ -1,16 +1,20 @@
 var osg = require('../../index.js');
 var fs = require('fs');
 
+osg.init({
+    //needed to run jobs on osg-xsede
+    condor: {
+        "+ProjectName": "CSIU"
+    }
+}, function() {
+    submit();
+});
+
 function submit() {
     osg.submit({
-        send: ['nr.100.fasta'],  
+        send: ['blast.sh', 'blastp', 'nr.100.fasta'],  
         receive: ['output.csv'], 
-        run: 'cat nr.100.fasta > output.csv',
-        condor: {
-            "+ProjectName": "CSIU"
-        }
-        //stdout: 'stdout.txt',
-        //stderr: 'stderr.txt',
+        run: 'blast.sh'
     }, {
         submit: function(job, event) {
             console.log("job submitted");
@@ -57,4 +61,3 @@ function submit() {
     });
 };
 
-submit();

@@ -45,6 +45,9 @@ npm install osg
 echo "listing" `pwd`
 ls -la node_modules/osg
 
+echo "dumping wn directory content one last time"
+ls -la
+
 echo "starting run.js"
 node node_modules/osg/wn/run.js "$@"
 

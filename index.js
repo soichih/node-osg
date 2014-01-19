@@ -3,8 +3,9 @@ var Promise = require('promise');
 var tmp = require('tmp');
 var async = require('async');
 var which = require('which');
-var clone = require('clone');
+var extend = require('util')._extend;
 
+/*
 var Job = function() {
     this.callbacks =  {
         submit: [],
@@ -15,9 +16,9 @@ var Job = function() {
     }
 };
 Job.prototype = {
-    submit: function(call) {this.callbacks.submit.push(call); return this;},
-    call_submit: function(res) {
-        this.callbacks.submit.forEach(function(call) {
+    started: function(call) {this.callbacks.submit.push(call); return this;},
+    call_started: function(res) {
+        this.callbacks.started.forEach(function(call) {
             call(res);
         });
     },
@@ -29,16 +30,35 @@ Job.prototype = {
         });
     },
 
-    success: function(call) {this.callbacks.success.push(call); return this;},
-    call_success: function(res) {
-        this.callbacks.success.forEach(function(call) {
+    stopped: function(call) {this.callbacks.stopped.push(call); return this;},
+    call_stopped: function(res) {
+        this.callbacks.stopped.forEach(function(call) {
             call(res);
         });
     },
 
+    ///////////////////////////////////////////////////////////////////////////
+    //
+    // other less common event handler..
+    //
+    submitted: function(call) {this.callbacks.submitted.push(call); return this;},
+    call_submitted: function(res) {
+        this.callbacks.submitted.forEach(function(call) {
+            call(res);
+        });
+    },
+
+
     failed: function(call) {this.callbacks.failed.push(call); return this;},
     call_failed: function(res) {
         this.callbacks.failed.forEach(function(call) {
+            call(res);
+        });
+    },
+
+    held: function(call) {this.callbacks.held.push(call); return this;},
+    call_held: function(res) {
+        this.callbacks.held.forEach(function(call) {
             call(res);
         });
     },
@@ -50,11 +70,17 @@ Job.prototype = {
         });
     },
 };
+*/
 
-exports.submit = function(options) {
-    var job = new Job();
-    job.options = options;
+var osg_options = {};
+exports.init = function(options, callback) {
+    osg_options = options;
 
+    //nothing to initialize yet
+    callback();
+}
+
+exports.submit = function(options, callbacks) {
     //initialize
     async.parallel([
         //send git executable
@@ -63,7 +89,7 @@ exports.submit = function(options) {
                 if(err) {
                     console.log("can't find git. please install it on the submit host");
                 } else {
-                    options.input.push(path);
+                    options.send.push(path);
                     next();
                 }
             });
@@ -85,9 +111,8 @@ exports.submit = function(options) {
             }
         }
     ], function() {
-        htcondor.submit({
+        var submit_options = {
             universe: "vanilla",
-            //universe: "local",
 
             executable: __dirname+"/wn/boot.sh",
             arguments: options.run,
@@ -95,17 +120,26 @@ exports.submit = function(options) {
 
             shouldtransferfiles: "yes",
             when_to_transfer_output: "ON_EXIT",
-            transfer_input_files: options.input,
+            transfer_input_files: options.send,
+            transfer_output_files: options.receive,
             output: options.stdout,
             error: options.stderr,
-
-            "+ProjectName": "CSIU",
             queue: 1
-        }).then(function(joblog) {
-            var submit_event = clone(joblog.props);
+        };
+
+        //override raw condor submit options
+        if(osg_options.condor) {
+            submit_options = extend(submit_options, osg_options.condor);
+        }
+        //console.dir(submit_options);
+
+        htcondor.submit(submit_options).then(function(job) {
+            var joblog = job.log;
+            var jobopts = job.options;
+            var submit_event = extend({}, joblog.props);
 
             //a bit of fake to be props from xml joblog..
-            console.log(joblog.jobid);
+            //console.log(joblog.jobid);
             var jobid = joblog.jobid.split(".");
             submit_event.Cluster = parseInt(jobid[0]);
             submit_event.Proc = parseInt(jobid[1]);
@@ -113,40 +147,51 @@ exports.submit = function(options) {
             
             //we miss submit event because then() will be excuted *after* the job is submitted
             //so, just to be more consistent, I fire submit_event just in case
-            job.call_submit(submit_event);
+            callbacks.submit(job, submit_event);
 
             //subscribe to joblog event
             joblog.event(function(event) {
                 switch(event.MyType) {
-                /* - I will never receive this - we are bit too late.. we will use joblog.props instead
                 case "SubmitEvent":
-                    job.call_submit(event);
+                    if(callbacks.submit) {
+                        callbacks.submit(job, event);
+                    }
                     break;
-                */
                 case "ExecuteEvent":
-                    job.call_progress(event);
+                    if(callbacks.execute) {
+                        callbacks.execute(job, event);
+                    }
                     break;
                 case "JobImageSizeEvent":
-                    job.call_progress(event);
+                    if(callbacks.image_size) {
+                        callbacks.image_size(job, event);
+                    }
+                    break; 
+                case "ShadowExceptionEvent":
+                    if(callbacks.execption) {
+                        callbacks.exception(job, event);
+                    }
+                    break;
+                case "JobHeldEvent":
+                    if(callbacks.held) {
+                        callbacks.held(job, event);
+                        joblog.unwatch();
+                    }
                     break;
                 case "JobTerminatedEvent":
-                    if(event.ReturnValue == 0) {
-                        job.call_success(event);
-                    } else {
-                        job.call_failed(event);
+                    if(callbacks.terminated) {
+                        callbacks.terminated(job, event);
+                        joblog.unwatch();
                     }
-                    joblog.unwatch();
                     break;
                 default:
                     console.log("unknown event type:"+event.MyType);
                     console.dir(event);
                 }
             });
-            //job.call_progress(props);
         }).done(function(err) {
             if(err) throw err;
         });
     });
-    return job;
 }
 

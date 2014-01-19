@@ -1,42 +1,63 @@
 var osg = require('../../index.js');
 var fs = require('fs');
 
+osg.init({
+    //needed to run jobs on osg-xsede
+    condor: {
+        "+ProjectName": "CSIU"
+    }
+}, function() {
+    submit();
+});
+
 function submit() {
-    var job = osg.submit({
-        input: ['job.js'],
-        run: './node job.js',
-        //stdout: 'stdout.txt',
-        //stderr: 'stderr.txt',
-    });
-    job.submit(function(event) {
-        console.log("job submitted");
-        console.dir(event);
-    }).progress(function(event) {
-        console.log("job making progress");
-        console.dir(event);
-    }).success(function(event) {
-        console.log("job fisnished successfully");
-        console.dir(event);
-        fs.readFile(job.options.stdout, 'utf8', function (err,data) {
-            console.log(data);
-        }); 
-
-        //resubmit
-        //submit();
-
-    }).failed(function(event) {
-        console.log("job failed");
-        console.dir(event);
-        fs.readFile(job.options.stdout, 'utf8', function (err,data) {
-            console.log(data);
-        }); 
-        fs.readFile(job.options.stderr, 'utf8', function (err,data) {
-            console.log(data);
-        }); 
-    }).evicted(function() {
-        console.log("job evicted");
-        console.dir(event);
+    osg.submit({
+        send: ['job.js'],  
+        receive: ['output.txt'], 
+        run: 'node job.js',
+    }, {
+        submit: function(job, event) {
+            console.log("job submitted");
+            console.dir(event);
+        },
+        execute: function(job, event) {
+            console.log("job executing");
+            console.dir(event);
+        },
+        image_size: function(job, event) {
+            console.log("image_size");
+            console.dir(event);
+        },
+        exception: function(job, event) {
+            console.log("exception");
+            console.dir(event);
+        },
+        held: function(job, event) {
+            console.log("job held");
+            console.dir(job);
+            console.dir(event);
+            fs.readFile(job.options.output, 'utf8', function (err,data) {
+                console.log(data);
+            }); 
+            fs.readFile(job.options.error, 'utf8', function (err,data) {
+                console.log(data);
+            }); 
+        },
+        evicted: function(job, event) {
+            console.log("job evicted");
+            console.dir(event);
+        },
+        terminated: function(job, event) {
+            console.log("job terminated");
+            console.dir(job);
+            console.dir(event);
+            fs.readFile(job.options.output, 'utf8', function (err,data) {
+                console.log(data);
+            }); 
+            fs.readFile(job.options.error, 'utf8', function (err,data) {
+                console.log(data);
+            }); 
+        },
     });
 };
 
-submit();

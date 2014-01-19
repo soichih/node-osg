@@ -1,3 +1,5 @@
+var fs = require('fs');
+
 console.log("here is my job");
 
 console.log("creating an array");
@@ -10,6 +12,8 @@ var sum = num.reduce(function(sum, n) {
     return sum + n;
 });
 
-console.log(sum);
+fs.writeFile('output.txt', sum, function (err) {
+    if (err) throw err;
+});
 
 console.error("outputing something to stderr because I am bored");

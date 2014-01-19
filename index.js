@@ -1,9 +1,12 @@
+var extend = require('util')._extend;
+var fs = require('fs');
+var path = require('path');
+
 var htcondor = require('htcondor');
 var Promise = require('promise');
 var tmp = require('tmp');
 var async = require('async');
 var which = require('which');
-var extend = require('util')._extend;
 
 /*
 var Job = function() {
@@ -72,15 +75,21 @@ Job.prototype = {
 };
 */
 
-var osg_options = {};
+var osg_options = {
+    env: {}
+};
 exports.init = function(options, callback) {
-    osg_options = options;
+    osg_options = extend(osg_options, options);
 
     //nothing to initialize yet
     callback();
 }
 
 exports.submit = function(options, callbacks) {
+    options = extend({
+        env: {}
+    }, options);
+
     //initialize
     async.parallel([
         /*
@@ -96,12 +105,25 @@ exports.submit = function(options, callbacks) {
             });
         },
         */
+        //create options.json
+        function(next) {
+            tmp.file({keep: false, postfix: '.json'}, function(err, tmppath, fd) { 
+                if(err) throw err;
+                fs.write(fd, JSON.stringify(options));
+                options.run = path.basename(tmppath) + " " +options.run; //prepend env.json
+                options.send.push(tmppath);
+                next();
+            });
+        },
         //create tmp stdout
         function(next) {
             if(options.stdout) {
                 next();
             } else {
-                tmp.file({keep: true}, function(err, path) { options.stdout = path; next();});
+                tmp.file({keep: false}, function(err, path) { 
+                    if(err) throw err;
+                    options.stdout = path; next();
+                });
             }
         },
         //create tmp stderr
@@ -109,7 +131,10 @@ exports.submit = function(options, callbacks) {
             if(options.stderr) {
                 next();
             } else {
-                tmp.file({keep: true}, function(err, path) { options.stderr = path; next();});
+                tmp.file({keep: false}, function(err, path) { 
+                    if(err) throw err;
+                    options.stderr = path; next();
+                });
             }
         }
     ], function() {
@@ -129,11 +154,10 @@ exports.submit = function(options, callbacks) {
             queue: 1
         };
 
-        //override raw condor submit options
-        if(osg_options.condor) {
-            submit_options = extend(submit_options, osg_options.condor);
+        //override with user submitted raw condor submit options
+        if(osg_options.submit) {
+            submit_options = extend(submit_options, osg_options.submit);
         }
-        //console.dir(submit_options);
 
         htcondor.submit(submit_options).then(function(job) {
             var joblog = job.log;
@@ -157,39 +181,46 @@ exports.submit = function(options, callbacks) {
                 case "SubmitEvent":
                     if(callbacks.submit) {
                         callbacks.submit(job, event);
+                        return;
                     }
                     break;
                 case "ExecuteEvent":
                     if(callbacks.execute) {
                         callbacks.execute(job, event);
+                        return;
                     }
                     break;
                 case "JobImageSizeEvent":
                     if(callbacks.image_size) {
                         callbacks.image_size(job, event);
+                        return;
                     }
                     break; 
                 case "ShadowExceptionEvent":
                     if(callbacks.execption) {
                         callbacks.exception(job, event);
+                        return;
                     }
                     break;
                 case "JobHeldEvent":
                     if(callbacks.held) {
                         callbacks.held(job, event);
                         joblog.unwatch();
+                        return;
                     }
                     break;
                 case "JobTerminatedEvent":
                     if(callbacks.terminated) {
                         callbacks.terminated(job, event);
                         joblog.unwatch();
+                        return;
                     }
                     break;
                 default:
                     console.log("unknown event type:"+event.MyType);
-                    console.dir(event);
                 }
+                //dump event if it's not handled (should I?)
+                console.dir(event);
             });
         }).done(function(err) {
             if(err) throw err;

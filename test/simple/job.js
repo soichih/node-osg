@@ -1,6 +1,6 @@
 var fs = require('fs');
 
-console.log("here is my job");
+console.log("I am job.js")
 
 console.log("creating an array");
 var num = [];

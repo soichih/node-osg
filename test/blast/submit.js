@@ -2,19 +2,17 @@ var osg = require('../../index.js');
 var fs = require('fs');
 
 osg.init({
-    //needed to run jobs on osg-xsede
-    condor: {
-        "+ProjectName": "CSIU"
-    }
+    submit: { "+ProjectName": "CSIU" } //needed to run jobs on osg-xsede
 }, function() {
     submit();
 });
 
 function submit() {
     osg.submit({
-        send: ['blast.sh', 'blastp', 'nr.100.fasta'],  
-        receive: ['output.csv'], 
-        run: 'blast.sh'
+        send: ['blast.sh', 'blastx', 'nr.100.fasta'],  
+        receive: ['output.xml'], 
+        run: './blast.sh',
+        timeout: 60 //kill job if it doesn't finish in 60 seconds
     }, {
         submit: function(job, event) {
             console.log("job submitted");
@@ -54,9 +52,11 @@ function submit() {
             fs.readFile(job.options.output, 'utf8', function (err,data) {
                 console.log(data);
             }); 
+            /*
             fs.readFile(job.options.error, 'utf8', function (err,data) {
                 console.log(data);
             }); 
+            */
         },
     });
 };

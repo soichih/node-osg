@@ -16,24 +16,28 @@ else
     echo "OSG_SQUID_LOCATION is not set... not using squid"
 fi
 
-echo "downloading node"
-node_download_url=http://nodejs.org/dist/v0.10.24/node-v0.10.24-linux-x64.tar.gz
-curl -m 120 -H "Pragma:" -O $node_download_url
-if [ $? -ne 0 ]; then
-    echo "failed to download node.. quitting"
-    exit 1 
-#    echo "couldn't download node.. trying without http_proxy again"
-#    unset http_proxy
-#    curl -m 120 -H "Pragma:" -O $node_download_url
-#    if [ $? -ne 0 ]; then
-#        echo "failed again.. exiting"
-#        exit 1
-#    fi
+export tmp=${OSG_WN_TMP:-/tmp}
+
+node_name=node-v0.10.24-linux-x64
+if [ ! -d $tmp/$node_name ];
+then
+    node_download_url=http://nodejs.org/dist/v0.10.24/$node_name.tar.gz
+    echo "downloading $node_download_url"
+    ( cd $tmp; curl -m 120 -H "Pragma:" -O $node_download_url )
+    if [ $? -ne 0 ]; then
+        echo "failed to download node.. quitting"
+        exit 1 
+    fi
+
+    echo "unpacking node"
+    ( cd $tmp ; tar -xzf $node_name.tar.gz )
+else
+    echo "$tmp/$node_name already downloaded & unpacked"
 fi
 
-echo "unpack node"
-tar -xzf node-v0.10.24-linux-x64.tar.gz
-export PATH=./node-v0.10.24-linux-x64/bin:$PATH
+#TODO - verify node installation...
+
+export PATH=$tmp/$node_name/bin:$PATH
 
 echo "node version" `which node` `node -v`
 echo "npm version" `which npm` `npm -v`

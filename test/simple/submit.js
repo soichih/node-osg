@@ -13,8 +13,11 @@ osg.init({
 function submit() {
     osg.submit({
         send: ['job.js'],  
-        receive: ['output.txt'], 
-        run: 'node job.js',
+        //receive: ['output.txt'], 
+        run: 'node job.js', //command to run and arguments
+        
+        //any custom options that I'd like to pass to job
+        //env: {name: "soichi"}
     }, {
         submit: function(job, event) {
             console.log("job submitted");
@@ -34,7 +37,7 @@ function submit() {
         },
         held: function(job, event) {
             console.log("job held");
-            console.dir(job);
+            //console.dir(job);
             console.dir(event);
             fs.readFile(job.options.output, 'utf8', function (err,data) {
                 console.log(data);

@@ -52,7 +52,13 @@ ls -la node_modules/osg
 echo "dumping wn directory content one last time"
 ls -la
 
+#this works, but we need to parse options.json to set it here.. 
+#it would be much better if I could do this in run.js
+#ulimit -v 300000
+
 echo "starting run.js"
 node node_modules/osg/wn/run.js "$@"
+ret=$?
 
-
+#echo "exited run.js with code $ret"
+exit $ret

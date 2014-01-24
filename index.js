@@ -3,7 +3,7 @@ var fs = require('fs');
 var path = require('path');
 
 var htcondor = require('htcondor');
-var Promise = require('promise');
+//var Promise = require('promise');
 var tmp = require('tmp');
 var async = require('async');
 var which = require('which');
@@ -161,70 +161,73 @@ exports.submit = function(options, callbacks) {
 
         htcondor.submit(submit_options).then(function(job) {
             var joblog = job.log;
+
+            /*
             var jobopts = job.options;
+
             var submit_event = extend({}, joblog.props);
 
             //a bit of fake to be props from xml joblog..
             //console.log(joblog.jobid);
-            var jobid = joblog.jobid.split(".");
-            submit_event.Cluster = parseInt(jobid[0]);
-            submit_event.Proc = parseInt(jobid[1]);
+            //var jobid = joblog.jobid.split(".");
+            submit_event.Proc = parseInt(job.id.proc);
+            submit_event.Cluster = parseInt(job.id.cluster);
             //submit_event.MyType = "SubmitEvent"; //MyType is seto to "Job"..
             
             //we miss submit event because then() will be excuted *after* the job is submitted
             //so, just to be more consistent, I fire submit_event just in case
-            callbacks.submit(job, submit_event);
+            if(callbacks.submit) {
+                callbacks.submit(job, submit_event);
+            }
+            */
 
             //subscribe to joblog event
-            joblog.event(function(event) {
+            joblog.watch(function(event) {
+                var callback = undefined;
+
+                //find callback to call
                 switch(event.MyType) {
                 case "SubmitEvent":
-                    if(callbacks.submit) {
-                        callbacks.submit(job, event);
-                        return;
-                    }
-                    break;
+                    callback = callbacks.submit; break;
                 case "ExecuteEvent":
-                    if(callbacks.execute) {
-                        callbacks.execute(job, event);
-                        return;
-                    }
-                    break;
+                    callback = callbacks.execute; break;
                 case "JobImageSizeEvent":
-                    if(callbacks.image_size) {
-                        callbacks.image_size(job, event);
-                        return;
-                    }
-                    break; 
+                    callback = callbacks.image_size; break; 
                 case "ShadowExceptionEvent":
-                    if(callbacks.execption) {
-                        callbacks.exception(job, event);
-                        return;
-                    }
-                    break;
+                    callback = callbacks.exception; break;
                 case "JobHeldEvent":
-                    if(callbacks.held) {
-                        callbacks.held(job, event);
-                        joblog.unwatch();
-                        return;
-                    }
-                    break;
+                    callback = callbacks.held; break;
                 case "JobTerminatedEvent":
-                    if(callbacks.terminated) {
-                        callbacks.terminated(job, event);
-                        joblog.unwatch();
-                        return;
-                    }
-                    break;
+                    callback = callbacks.terminated; break;
+                case "JobEvictedEvent":
+                    callback = callbacks.evicted; break;
+                case "JobReleaseEvent":
+                    callback = callbacks.released; break;
                 default:
                     console.log("unknown event type:"+event.MyType);
                 }
-                //dump event if it's not handled (should I?)
-                console.dir(event);
+
+                if(callback) {
+                    callback(job, event);
+                } else {
+                    //dump event if it's not handled (should I?)
+                    console.dir(event);
+                }
             });
         }).done(function(err) {
             if(err) throw err;
         });
     });
+}
+
+//just wrappers around htcondor.
+exports.remove = function(job, callback) {
+    htcondor.remove(job, callback);
+}
+exports.hold = function(job, callback) {
+    htcondor.hold(job, callback);
+}
+exports.release = function(job, callback) {
+    htcondor.release(job, callback);
 }
 

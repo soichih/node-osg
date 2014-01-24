@@ -15,7 +15,7 @@ function submit() {
         send: ['job.js'],  
         //receive: ['output.txt'], 
         run: 'node job.js', //command to run and arguments
-        timeout: 15, //kill in 15 seconds
+        timeout: 25, //kill in 15 seconds
         
         //any custom options that I'd like to pass to job
         //env: {name: "soichi"}

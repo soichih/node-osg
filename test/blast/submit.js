@@ -10,10 +10,11 @@ osg.init({
 function submit() {
     osg.submit({
         send: ['blast.sh', 'blastx', 'nr.100.fasta'],  
-        receive: ['output.xml'], 
+        receive: ['output.xml'],  
         run: './blast.sh',
         timeout: 60 //kill job if it doesn't finish in 60 seconds
     }, {
+        /*
         submit: function(job, event) {
             console.log("job submitted");
             console.dir(event);
@@ -26,9 +27,12 @@ function submit() {
             console.log("image_size");
             console.dir(event);
         },
+        */
         exception: function(job, event) {
             console.log("exception");
             console.dir(event);
+
+            job.log.unwatch();
         },
         held: function(job, event) {
             console.log("job held");
@@ -40,23 +44,33 @@ function submit() {
             fs.readFile(job.options.error, 'utf8', function (err,data) {
                 console.log(data);
             }); 
+
+            job.log.unwatch();
+
+            console.log("removing job");
+            osg.remove(job);
         },
         evicted: function(job, event) {
             console.log("job evicted");
             console.dir(event);
+
+            job.log.unwatch();
         },
         terminated: function(job, event) {
-            console.log("job terminated");
             console.dir(job);
-            console.dir(event);
+
             fs.readFile(job.options.output, 'utf8', function (err,data) {
                 console.log(data);
             }); 
+
+            console.dir(event);
+            console.log("job terminated with return code:"+event.ReturnValue);
             /*
             fs.readFile(job.options.error, 'utf8', function (err,data) {
                 console.log(data);
             }); 
             */
+            job.log.unwatch();
         },
     });
 };

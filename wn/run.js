@@ -3,7 +3,7 @@ var spawn = require('child_process').spawn;
 var exec = require('child_process').exec;
 var fs = require('fs');
 
-console.log("I am run.js");
+console.log("run.js: initializing");
 
 //parse out command line arguments
 var options_path = process.argv[2];
@@ -22,8 +22,13 @@ var env = extend(process.env, options.env);
 console.log("dumping env");
 console.dir(env);
 
+//doesn't seem to work
+//exec("ulimit -v 300000");
+
 //ignore first 2 since it's node / condor.exec
 function run(cmd) {
+    console.log("run.js: running cmd:"+cmd);
+
     //kill job
     var job_timeout = null;
     if(options.timeout) {
@@ -43,16 +48,21 @@ function run(cmd) {
         process.stderr.write(data);
     });
     job.on('exit', function(code, signal) {
-        console.log("processed ended code:"+code+" signal:"+signal);
+        console.log("run.js: processed ended code:"+code+" signal:"+signal);
         if(job_timeout) {
             clearTimeout(job_timeout);
         }
+
+        //TODO - I am not sure if I should stay running or not.. but for now let's quit
+        process.exit(code);
     });
     job.on('error', function (err) {
         console.error("spawning error");
         console.error(err);
-    });
 
+        //TODO - I am not sure if I should stay running or not.. but for now let's quit
+        process.exit(1);
+    });
 };
 
 run(cmd);

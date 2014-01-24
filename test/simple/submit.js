@@ -13,12 +13,15 @@ osg.init({
 function submit() {
     osg.submit({
         send: ['job.js'],  
-        //receive: ['output.txt'], 
+        //receive: ['output.txt'], //don't set this if you want *all* files (not directory) created in the wn/cwd.
         run: 'node job.js', //command to run and arguments
         
-        //any custom options that I'd like to pass to job
-        //env: {name: "soichi"}
+        //env parameters to pass to my job
+        env: {name: "soichi"},
+        
+        timeout: 60*10 //kill job in 10 minutes (should take less than seconds to run)
     }, {
+        /*
         submit: function(job, event) {
             console.log("job submitted");
             console.dir(event);
@@ -27,10 +30,16 @@ function submit() {
             console.log("job executing");
             console.dir(event);
         },
+        */
         image_size: function(job, event) {
             console.log("image_size");
             console.dir(event);
+
+            //job.log.unwatch();
+            //osg.remove(job);
+            osg.hold(job);
         },
+
         exception: function(job, event) {
             console.log("exception");
             console.dir(event);
@@ -41,10 +50,13 @@ function submit() {
             console.dir(event);
             fs.readFile(job.options.output, 'utf8', function (err,data) {
                 console.log(data);
-            }); 
+            });
             fs.readFile(job.options.error, 'utf8', function (err,data) {
                 console.log(data);
-            }); 
+            });
+
+            console.log("releasing job");
+            osg.release(job);
         },
         evicted: function(job, event) {
             console.log("job evicted");
@@ -60,6 +72,8 @@ function submit() {
             fs.readFile(job.options.error, 'utf8', function (err,data) {
                 console.log(data);
             }); 
+
+            job.log.unwatch();
         },
     });
 };

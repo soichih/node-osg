@@ -45,11 +45,9 @@ echo "npm version" `which npm` `npm -v`
 echo "npm installing node-osg"
 npm install osg
 #npm link ~/git/node-osg
-
-echo "listing" `pwd`
 ls -la node_modules/osg
 
-echo "dumping wn directory content one last time"
+echo "dumping wn directory content one last time" `pwd`
 ls -la
 
 #this works, but we need to parse options.json to set it here.. 

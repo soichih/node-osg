@@ -187,6 +187,8 @@ exports.submit = function(options, callbacks) {
 
                 //find callback to call
                 switch(event.MyType) {
+                case "GlobusSubmitEvent":
+                case "GridSubmitEvent":
                 case "SubmitEvent":
                     callback = callbacks.submit; break;
                 case "ExecuteEvent":

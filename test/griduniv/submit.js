@@ -8,8 +8,8 @@ osg.init({
 
         //worked
         //grid_resource: "gt2 earth.crc.nd.edu/jobmanager-condor"
-        //grid_resource: "gt2 ce.grid.iu.edu/jobmanager-condor"
-        grid_resource: "gt2 ndcms.crc.nd.edu/jobmanager-condor"
+        grid_resource: "gt2 ce.grid.iu.edu/jobmanager-condor"
+        //grid_resource: "gt2 ndcms.crc.nd.edu/jobmanager-condor"
 
         //not tested yet
         //grid_resource: "gt2 cms-xen11.fnal.gov/jobmanager-condor"

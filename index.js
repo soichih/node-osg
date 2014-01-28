@@ -138,6 +138,8 @@ exports.submit = function(options, callbacks) {
             }
         }
     ], function() {
+        options.send.push(__dirname+"/wn/osg");
+
         var submit_options = {
             universe: "vanilla",
 

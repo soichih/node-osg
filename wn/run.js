@@ -14,13 +14,13 @@ var cmd = process.argv.slice(3);
 //load options json
 var options_json = fs.readFileSync(options_path, {encoding: 'utf8'});
 var options = JSON.parse(options_json);
-console.log("dumping options");
-console.dir(options);
+//console.log("dumping options");
+//console.dir(options);
 
 //env
 var env = extend(process.env, options.env);
-console.log("dumping env");
-console.dir(env);
+//console.log("dumping env");
+//console.dir(env);
 
 //doesn't seem to work
 //exec("ulimit -v 300000");

@@ -1,0 +1,101 @@
+#!/bin/bash
+
+#some common bash scripts that is used to run osg jobs
+
+function set-httpproxy {
+    #setting up squid location
+    export OSG_SQUID_LOCATION=${OSG_SQUID_LOCATION:-UNAVAILABLE}
+    if [ "$OSG_SQUID_LOCATION" != UNAVAILABLE ]; then
+        #TODO - test to see if squid actually works (if not, ask submitter to report to the site)
+
+        echo "seeting http_proxy=" $OSG_SQUID_LOCATION
+        export http_proxy=$OSG_SQUID_LOCATION
+        return 0
+    else
+        echo "OSG_SQUID_LOCATION is not set... not using squid"
+        return 1
+    fi
+}
+
+#cache application by downloading specified tar.gz and unpack it, then create symlinks on the current working directory
+#it re-uses cache if cache is available
+#it avoids if other instance is already downloading the app.
+#usage :: ./osg app http://somewhere.com/stuff.tar.gz stuff
+
+function app {
+    appurl=$1
+    appname=$2
+
+    #figuring out best place to install app
+    if [ -w "$OSG_APP" ]; then
+        echo "using OSG_APP($OSG_APP) to install apps"
+        appdir=$OSG_APP
+    else
+        if [ -w "$OSG_WN_TMP" ]; then
+            echo "using OSG_WN_TMP($OSG_WN_TMP) to install apps"
+            appdir=$OSG_WN_TMP
+        else
+            if [ -w "/tmp" ]; then
+                echo "using /tmp to install apps"
+                appdir=/tmp
+            else
+                echo "using cwd to install apps"
+                appdir=`pwd`
+            fi
+        fi
+    fi
+
+    #download app and unpack if the app not yet installed already being installed (wait if it's installed by someone else)
+    if [ ! -d "$appdir/$appname" ]; then
+        echo "no $appname in $appdir"
+        if [ ! -f "$appdir/$appname.tar.gz" ]; then
+            echo "downloading & unpacking $appurl"
+            ( 
+                cd $appdir 
+                curl -m 120 -H "Pragma:" -O $appurl 
+                tar -xzf $appname.tar.gz 
+                rm $appname.tar.gz 
+            )
+            if [ $? -ne 0 ]; then
+                echo "failed to download/unpack app: $appurl"
+                exit 1
+            fi
+    
+        else
+            echo "$appname seems to be downloaded by someone else.. waiting"
+            for i in {0..120}
+            do
+                sleep 1
+                if [ -f $appdir/$appname ]; then
+                    break
+                fi
+            done
+            if [ ! -f $appdir/$appname ]; then
+                echo "still no app ... but $appdir/$appname.tar.gz exists.. please remove!"
+                exit 2 #what error code should I use?
+            fi
+        fi
+    else
+        echo "$appname already exists in $appdir"
+    fi
+
+    #create symlink to the app
+    ln -s $appdir/$appname $appname
+}
+
+cmd=$1
+case "$cmd" in
+set-httpproxy)
+    set-httpproxy
+    ;;
+app)
+    app $2 $3
+    ;;
+*)
+    echo "unknown command given $cmd"
+    ;;
+esac
+
+exit $?
+
+

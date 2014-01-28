@@ -1,6 +1,6 @@
 {
     "name": "osg",
-    "version": "0.0.14",
+    "version": "0.0.15",
     "description": "nodejs client libraries for Open Science Grid",
     "main": "index.js",
     "scripts": {
@@ -21,16 +21,15 @@
         "url": "https://github.com/soichih/node-osg/issues"
     },
     "dependencies": {
-        "htcondor": "latest",
-        "tmp": "latest",
-        "temp": "latest",
-        "merge": "latest",
-        "socket.io": "latest",
-        "socket.io-client": "latest",
-        "express": "latest",
-        "cookie": "latest",
-        "connect": "latest",
-        "async": "latest",
-        "which": "latest"
+        "htcondor": "*",
+        "tmp": "*",
+        "merge": "*",
+        "socket.io": "*",
+        "socket.io-client": "*",
+        "express": "*",
+        "cookie": "*",
+        "connect": "*",
+        "async": "*",
+        "which": "*"
     }
 }

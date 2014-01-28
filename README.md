@@ -13,7 +13,7 @@ var fs = require('fs');
 
 osg.init({
     //only needed to run jobs on osg-xsede
-    condor: { "+ProjectName": "CSIU" }
+    submit: { "+ProjectName": "CSIU" }
 }, function() {
     //now it's ready to start submitting jobs
     osg.submit({
@@ -176,5 +176,22 @@ job fisnished successfully
   ReceivedBytes: 10968307,
   TerminatedNormally: false }
 ```
+
+If you want to submit to a remote cluster (via grid universe) add submit options inside your osg.init like so..
+
+```
+osg.init({
+    //needed to submit to remote cluster
+    submit: {
+        universe: "grid",
+        grid_resource: "gt2 ce.grid.iu.edu/jobmanager-condor"
+    }
+}, function() {
+    submit();
+});
+
+```
+
+If you want to submit specific jobs to specific cluster, then you can add those submit options for each jobs instead of adding them on osg.init()
 
 Please see /test directory for more sample codes

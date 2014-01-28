@@ -11,7 +11,7 @@ echo "setting up squid location"
 export OSG_SQUID_LOCATION=${OSG_SQUID_LOCATION:-UNAVAILABLE}
 if [ "$OSG_SQUID_LOCATION" != UNAVAILABLE ]; then
     echo "using squid:" $OSG_SQUID_LOCATION
-    export http_proxy=$OSG_SQUID_LOCATION
+    #export http_proxy=$OSG_SQUID_LOCATION
 else
     echo "OSG_SQUID_LOCATION is not set... not using squid"
 fi
@@ -43,9 +43,16 @@ echo "node version" `which node` `node -v`
 echo "npm version" `which npm` `npm -v`
 
 echo "npm installing node-osg"
-npm install osg
 #npm link ~/git/node-osg
-ls -la node_modules/osg
+#time npm install -registry http://registry.npmjs.org/ -g osg
+time npm install -g osg
+if [[ $? != 0 ]] ;
+then
+    echo "failed to npm install node-osg.. dumping debug log"
+    ls -la node_modules/osg
+    cat npm-debug.log
+    exit 1
+fi
 
 echo "dumping wn directory content one last time" `pwd`
 ls -la
@@ -54,8 +61,8 @@ ls -la
 #it would be much better if I could do this in run.js
 #ulimit -v 300000
 
-echo "starting run.js"
-node node_modules/osg/wn/run.js "$@"
+echo "starting run.js" #use run.js that comes with node-osg
+node $tmp/$node_name/lib/node_modules/osg/wn/run.js "$@"
 ret=$?
 
 #echo "exited run.js with code $ret"

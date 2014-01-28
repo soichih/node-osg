@@ -199,6 +199,8 @@ exports.submit = function(options, callbacks) {
                     callback = callbacks.exception; break;
                 case "JobHeldEvent":
                     callback = callbacks.held; break;
+                case "JobAbortedEvent":
+                    callback = callbacks.aborted; break;
                 case "JobTerminatedEvent":
                     callback = callbacks.terminated; break;
                 case "JobEvictedEvent":

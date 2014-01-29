@@ -3,77 +3,11 @@ var fs = require('fs');
 var path = require('path');
 
 var htcondor = require('htcondor');
-//var Promise = require('promise');
-var tmp = require('tmp');
+var temp = require('temp');
 var async = require('async');
 var which = require('which');
 
-/*
-var Job = function() {
-    this.callbacks =  {
-        submit: [],
-        progress: [],
-        success: [],
-        failed: [],
-        evicted: [],
-    }
-};
-Job.prototype = {
-    started: function(call) {this.callbacks.submit.push(call); return this;},
-    call_started: function(res) {
-        this.callbacks.started.forEach(function(call) {
-            call(res);
-        });
-    },
-
-    progress: function(call) {this.callbacks.progress.push(call); return this;},
-    call_progress: function(res) {
-        this.callbacks.progress.forEach(function(call) {
-            call(res);
-        });
-    },
-
-    stopped: function(call) {this.callbacks.stopped.push(call); return this;},
-    call_stopped: function(res) {
-        this.callbacks.stopped.forEach(function(call) {
-            call(res);
-        });
-    },
-
-    ///////////////////////////////////////////////////////////////////////////
-    //
-    // other less common event handler..
-    //
-    submitted: function(call) {this.callbacks.submitted.push(call); return this;},
-    call_submitted: function(res) {
-        this.callbacks.submitted.forEach(function(call) {
-            call(res);
-        });
-    },
-
-
-    failed: function(call) {this.callbacks.failed.push(call); return this;},
-    call_failed: function(res) {
-        this.callbacks.failed.forEach(function(call) {
-            call(res);
-        });
-    },
-
-    held: function(call) {this.callbacks.held.push(call); return this;},
-    call_held: function(res) {
-        this.callbacks.held.forEach(function(call) {
-            call(res);
-        });
-    },
-
-    evicted: function(call) {this.callbacks.evicted.push(call); return this;},
-    call_evicted: function(res) {
-        this.callbacks.evicted.forEach(function(call) {
-            call(res);
-        });
-    },
-};
-*/
+temp.track();
 
 var osg_options = {
     env: {}
@@ -105,24 +39,27 @@ exports.submit = function(options, callbacks) {
             });
         },
         */
-        //create options.json
+        //create tmp options.json (used to send options to wn)
         function(next) {
-            tmp.file({keep: false, postfix: '.json'}, function(err, tmppath, fd) { 
+            temp.open("osg-options.", function(err, ojson) { 
                 if(err) throw err;
-                fs.write(fd, JSON.stringify(options));
-                options.run = path.basename(tmppath) + " " +options.run; //prepend env.json
-                options.send.push(tmppath);
+                fs.write(ojson.fd, JSON.stringify(options));
+                options.run = path.basename(ojson.path) + " " +options.run;
+                options.send.push(ojson.path);
                 next();
             });
         },
         //create tmp stdout
         function(next) {
             if(options.stdout) {
+                //user specified
                 next();
             } else {
-                tmp.file({keep: false}, function(err, path) { 
+                //creat temp one
+                temp.open("osg-stdout.", function(err, tmp) { 
                     if(err) throw err;
-                    options.stdout = path; next();
+                    options.stdout = tmp.path; 
+                    next();
                 });
             }
         },
@@ -131,9 +68,10 @@ exports.submit = function(options, callbacks) {
             if(options.stderr) {
                 next();
             } else {
-                tmp.file({keep: false}, function(err, path) { 
+                temp.open('osg-stderr.', function(err, tmp) { 
                     if(err) throw err;
-                    options.stderr = path; next();
+                    options.stderr = tmp.path; 
+                    next();
                 });
             }
         }

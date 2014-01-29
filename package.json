@@ -1,6 +1,6 @@
 {
     "name": "osg",
-    "version": "0.0.15",
+    "version": "0.0.17",
     "description": "nodejs client libraries for Open Science Grid",
     "main": "index.js",
     "scripts": {
@@ -22,13 +22,7 @@
     },
     "dependencies": {
         "htcondor": "*",
-        "tmp": "*",
-        "merge": "*",
-        "socket.io": "*",
-        "socket.io-client": "*",
-        "express": "*",
-        "cookie": "*",
-        "connect": "*",
+        "temp": "*",
         "async": "*",
         "which": "*"
     }

@@ -43,6 +43,12 @@ function submit() {
         exception: function(job, event) {
             console.log("exception");
             console.dir(event);
+            fs.readFile(job.options.output, 'utf8', function (err,data) {
+                console.log(data);
+            });
+            fs.readFile(job.options.error, 'utf8', function (err,data) {
+                console.log(data);
+            });
         },
         held: function(job, event) {
             console.log("job held");

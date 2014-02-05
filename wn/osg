@@ -1,6 +1,9 @@
 #!/bin/bash
 
-#some common bash scripts that is used to run osg jobs
+###################################################################################################
+#
+# This shell script provides various utility functions for osg jobs
+# 
 
 function set-httpproxy {
     #setting up squid location

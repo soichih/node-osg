@@ -1,3 +1,4 @@
+#!/bin/bash
 echo "boot.sh on " `hostname` "as user" `whoami` `uname -a` `cat /etc/issue`
 echo "boot.sh cmd: $@"
 env | sort
@@ -24,8 +25,6 @@ echo "node version" `which node` `node -v`
 echo "npm version" `which npm` `npm -v`
 
 echo "installing node-osg"
-#npm link ~/git/node-osg
-
 unset http_proxy
 npm install -g osg
 if [[ $? != 0 ]] ;
@@ -35,9 +34,6 @@ then
     cat npm-debug.log
     exit 2
 fi
-
-#echo "dumping wn directory content one last time" `pwd`
-#ls -la
 
 #this works, but we need to parse options.json to set it here.. 
 #it would be much better if I could do this in run.js

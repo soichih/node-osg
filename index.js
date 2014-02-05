@@ -41,6 +41,11 @@ exports.submit = function(options, callbacks) {
             });
         },
         */
+        //package.json
+        function(next) {
+            options.send.push("package.json");
+            next();
+        },
         //create tmp options.json (used to send options to wn)
         function(next) {
             temp.open("osg-options.", function(err, ojson) { 
@@ -134,7 +139,7 @@ exports.submit = function(options, callbacks) {
                 case "ExecuteEvent":
                     callback = callbacks.execute; break;
                 case "JobImageSizeEvent":
-                    callback = callbacks.image_size; break; 
+                    callback = callbacks.progress; break; 
                 case "ShadowExceptionEvent":
                     callback = callbacks.exception; break;
                 case "JobHeldEvent":

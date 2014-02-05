@@ -2,7 +2,10 @@
 
 echo "osg here" `basename $0`
 
-#some common bash scripts that is used to run osg jobs
+###################################################################################################
+#
+# This shell script provides various utility functions for osg jobs
+# 
 
 #return codes
 #0 - success

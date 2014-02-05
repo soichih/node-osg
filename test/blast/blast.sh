@@ -1,14 +1,24 @@
 #!/bin/bash
 
-#download nr db (part 0)
-time wget http://osg-xsede.grid.iu.edu/scratch/iugalaxy/blastdb/nr.latest/nr.0.tar.gz
-wget http://osg-xsede.grid.iu.edu/scratch/iugalaxy/blastdb/nr.latest/blast.opt
-tar -xzf nr.0.tar.gz
-rm nr.0.tar.gz #save a bit of disk space..
+dbname=nr.0
+dburl=http://osg-xsede.grid.iu.edu/scratch/iugalaxy/blastdb/nr.latest/$dbname.tar.gz
+dbopturl=http://osg-xsede.grid.iu.edu/scratch/iugalaxy/blastdb/nr.latest/blast.opt
+
+echo "blast.sh listing"
+ls -la
+
+#enable osg client tool
+export PATH=$PATH:./
+
+osg set-httpproxy
+echo "setting data"
+osg data $dburl $dbname
+wget $dbopturl
 
 #limit memory at 2G
 ulimit -v 2048000
 
+export BLASTDB=$dbdir
 time ./blastx -query nr.100.fasta -db nr.00 -out output.xml -evalue 0.001 -outfmt 5 `cat blast.opt`
 blast_ret=$?
 

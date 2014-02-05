@@ -1,12 +1,5 @@
-#!/bin/bash
-
-#return code
-#0 - all good
-#1 - failed to download node
-
-echo "running boot.sh on " `hostname` "as user" `whoami` `uname -a` `cat /etc/issue`
-
-echo "dumping env"
+echo "boot.sh on " `hostname` "as user" `whoami` `uname -a` `cat /etc/issue`
+echo "boot.sh cmd: $@"
 env | sort
 
 #enable osg client tool
@@ -17,7 +10,11 @@ osg set-httpproxy
 
 node_name=node-v0.10.24-linux-x64
 osg app http://nodejs.org/dist/v0.10.24/$node_name.tar.gz $node_name
-ls -la 
+if [[ $? != 0 ]] ;
+then
+    echo "failed to download $node_name"
+    exit 1
+fi
 
 #TODO - verify node installation...
 
@@ -28,14 +25,15 @@ echo "npm version" `which npm` `npm -v`
 
 echo "installing node-osg"
 #npm link ~/git/node-osg
-#time npm install -registry http://registry.npmjs.org/ -g osg
+
+unset http_proxy
 npm install -g osg
 if [[ $? != 0 ]] ;
 then
     echo "failed to npm install node-osg.. dumping debug log"
     ls -la node_modules/osg
     cat npm-debug.log
-    exit 1
+    exit 2
 fi
 
 #echo "dumping wn directory content one last time" `pwd`
@@ -46,8 +44,8 @@ fi
 #ulimit -v 300000
 
 echo "starting run.js" #use run.js that comes with node-osg
-node $tmp/$node_name/lib/node_modules/osg/wn/run.js "$@"
+node $node_name/lib/node_modules/osg/wn/run.js "$@"
 ret=$?
 
-#echo "exited run.js with code $ret"
-exit $ret
+exit $?
+

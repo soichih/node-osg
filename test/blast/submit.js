@@ -12,7 +12,7 @@ function submit() {
         send: ['blast.sh', 'blastx', 'nr.100.fasta'],  
         receive: ['output.xml'],  
         run: './blast.sh',
-        timeout: 60 //kill job if it doesn't finish in 60 seconds
+        timeout: 120 //kill job if it doesn't finish in 60 seconds
     }, {
         /*
         submit: function(job, event) {
@@ -31,6 +31,12 @@ function submit() {
         exception: function(job, event) {
             console.log("exception");
             console.dir(event);
+            fs.readFile(job.options.output, 'utf8', function (err,data) {
+                console.log(data);
+            }); 
+            fs.readFile(job.options.error, 'utf8', function (err,data) {
+                console.log(data);
+            }); 
 
             job.log.unwatch();
         },
@@ -53,23 +59,31 @@ function submit() {
         evicted: function(job, event) {
             console.log("job evicted");
             console.dir(event);
+            fs.readFile(job.options.output, 'utf8', function (err,data) {
+                console.log(data);
+            }); 
+            fs.readFile(job.options.error, 'utf8', function (err,data) {
+                console.log(data);
+            }); 
 
             job.log.unwatch();
         },
         terminated: function(job, event) {
-            console.dir(job);
-
-            fs.readFile(job.options.output, 'utf8', function (err,data) {
-                console.log(data);
-            }); 
-
-            console.dir(event);
             console.log("job terminated with return code:"+event.ReturnValue);
-            /*
-            fs.readFile(job.options.error, 'utf8', function (err,data) {
-                console.log(data);
-            }); 
-            */
+            console.dir(event);
+            if(event.ReturnValue == 0) {
+                fs.readFile(job.options.output, 'utf8', function (err,data) {
+                    console.log(data);
+                }); 
+            } else {
+                fs.readFile(job.options.output, 'utf8', function (err,data) {
+                    console.log(data);
+                }); 
+                fs.readFile(job.options.error, 'utf8', function (err,data) {
+                    console.log(data);
+                }); 
+            }
+
             job.log.unwatch();
         },
     });

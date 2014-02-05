@@ -7,7 +7,7 @@ var temp = require('temp');
 var async = require('async');
 var which = require('which');
 
-temp.track();
+//temp.track();
 
 var osg_options = {
     env: {}
@@ -23,6 +23,8 @@ exports.submit = function(options, callbacks) {
     options = extend({
         env: {}
     }, options);
+
+    options.send.push(__dirname+"/wn/osg");
 
     //initialize
     async.parallel([
@@ -44,7 +46,7 @@ exports.submit = function(options, callbacks) {
             temp.open("osg-options.", function(err, ojson) { 
                 if(err) throw err;
                 fs.write(ojson.fd, JSON.stringify(options));
-                options.run = path.basename(ojson.path) + " " +options.run;
+                options.run = "boot "+path.basename(ojson.path)+" "+options.run;
                 options.send.push(ojson.path);
                 next();
             });
@@ -76,8 +78,6 @@ exports.submit = function(options, callbacks) {
             }
         }
     ], function() {
-        options.send.push(__dirname+"/wn/osg");
-
         var submit_options = {
             universe: "vanilla",
 
@@ -147,6 +147,8 @@ exports.submit = function(options, callbacks) {
                     callback = callbacks.evicted; break;
                 case "JobReleaseEvent":
                     callback = callbacks.released; break;
+                case "JobDisconnectedEvent":
+                    callback = callbacks.disconnected; break;
                 default:
                     console.log("unknown event type:"+event.MyType);
                 }

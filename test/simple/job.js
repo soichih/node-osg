@@ -21,4 +21,4 @@ console.error("outputing something to stderr because I am bored");
 //simulate some job
 setTimeout(function() {
     console.log("job ended");
-}, 1000*10);
+}, 1000);

@@ -25,6 +25,7 @@ exports.submit = function(options, callbacks) {
     }, options);
 
     options.send.push(__dirname+"/wn/osg");
+    options.send.push(__dirname+"/wn/run.js");
 
     //initialize
     async.parallel([
@@ -55,7 +56,7 @@ exports.submit = function(options, callbacks) {
             temp.open("osg-options.", function(err, ojson) { 
                 if(err) throw err;
                 fs.write(ojson.fd, JSON.stringify(options));
-                options.run = "boot.sh "+path.basename(ojson.path)+" "+options.run;
+                options.run = path.basename(ojson.path)+" "+options.run;
                 options.send.push(ojson.path);
                 next();
             });

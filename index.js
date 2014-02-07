@@ -43,15 +43,19 @@ exports.submit = function(options, callbacks) {
         */
         //package.json
         function(next) {
-            options.send.push("package.json");
-            next();
+            fs.exists('package.json', function(exists) {
+                if(exists) {
+                    options.send.push("package.json");
+                }
+                next();
+            });
         },
         //create tmp options.json (used to send options to wn)
         function(next) {
             temp.open("osg-options.", function(err, ojson) { 
                 if(err) throw err;
                 fs.write(ojson.fd, JSON.stringify(options));
-                options.run = "boot "+path.basename(ojson.path)+" "+options.run;
+                options.run = "boot.sh "+path.basename(ojson.path)+" "+options.run;
                 options.send.push(ojson.path);
                 next();
             });

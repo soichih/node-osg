@@ -39,8 +39,10 @@ fi
 #it would be much better if I could do this in run.js
 #ulimit -v 300000
 
-echo "starting run.js" #use run.js that comes with node-osg
-node $node_name/lib/node_modules/osg/wn/run.js "$@"
+#echo "starting run.js" #use run.js that comes with node-osg
+#node $node_name/lib/node_modules/osg/wn/run.js "$@"
+
+node run.js "$@"
 ret=$?
 
 exit $?

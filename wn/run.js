@@ -6,8 +6,10 @@ var fs = require('fs');
 console.log("run.js: initializing");
 
 //parse out command line arguments
+console.dir(process.argv);
 var options_path = process.argv[2];
 var cmd = process.argv.slice(3);
+console.log("run.js: "+cmd);
 
 //console.log("running in :"+process.cwd());
 

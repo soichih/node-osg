@@ -1,9 +1,18 @@
 #!/bin/bash
 
+echo "osg here" `basename $0`
+
 ###################################################################################################
 #
 # This shell script provides various utility functions for osg jobs
 # 
+
+#return codes
+#0 - success
+#1 - can't set squid
+#2 - boot / failed to install node-osg
+#3 - failed to download app/data
+#4 - downloading of app/data stuck elsewhere - removing and existing
 
 function set-httpproxy {
     #setting up squid location
@@ -29,6 +38,8 @@ function app {
     appurl=$1
     appname=$2
 
+    echo "installing $appname"
+
     #figuring out best place to install app
     if [ -w "$OSG_APP" ]; then
         echo "using OSG_APP($OSG_APP) to install apps"
@@ -48,6 +59,42 @@ function app {
         fi
     fi
 
+    cache $appdir $appurl $appname
+}
+
+function data {
+    appurl=$1
+    appname=$2
+
+    echo "installing $appname"
+
+    #figuring out best place to install app
+    if [ -w "$OSG_DATA" ]; then
+        echo "using OSG_DATA($OSG_DATA) to install data"
+        appdir=$OSG_DATA
+    else
+        if [ -w "$OSG_WN_TMP" ]; then
+            echo "using OSG_WN_TMP($OSG_WN_TMP) to install data"
+            appdir=$OSG_WN_TMP
+        else
+            if [ -w "/tmp" ]; then
+                echo "using /tmp to install apps"
+                appdir=/tmp
+            else
+                echo "using cwd to install apps"
+                appdir=`pwd`
+            fi
+        fi
+    fi
+
+    cache $appdir $appurl $appname
+}
+
+function cache {
+    appdir=$1
+    appurl=$2
+    appname=$3
+
     #download app and unpack if the app not yet installed already being installed (wait if it's installed by someone else)
     if [ ! -d "$appdir/$appname" ]; then
         echo "no $appname in $appdir"
@@ -61,21 +108,19 @@ function app {
             )
             if [ $? -ne 0 ]; then
                 echo "failed to download/unpack app: $appurl"
-                exit 1
+                return 3
             fi
-    
         else
-            echo "$appname seems to be downloaded by someone else.. waiting"
-            for i in {0..120}
-            do
-                sleep 1
-                if [ -f $appdir/$appname ]; then
-                    break
-                fi
-            done
-            if [ ! -f $appdir/$appname ]; then
-                echo "still no app ... but $appdir/$appname.tar.gz exists.. please remove!"
-                exit 2 #what error code should I use?
+            size1=`wc -c $appdir/${appname}.tar.gz`
+            sleep 10
+            size2=`wc -c $appdir/${appname}.tar.gz`
+            if [ ! $size1 -eq $size2 ]; then
+                echo "$appname is being downloaded by someone else"
+                break
+            else
+                echo "$appname download seems to be stuck .. removing and killing this job"
+                rm $appdir/$appname.tar.gz
+                return 4
             fi
         fi
     else
@@ -84,15 +129,24 @@ function app {
 
     #create symlink to the app
     ln -s $appdir/$appname $appname
+
+    return 0
 }
 
 cmd=$1
+shift
 case "$cmd" in
 set-httpproxy)
     set-httpproxy
     ;;
 app)
-    app $2 $3
+    app $@
+    ;;
+data)
+    data $@
+    ;;
+cache)
+    cache $@
     ;;
 *)
     echo "unknown command given $cmd"

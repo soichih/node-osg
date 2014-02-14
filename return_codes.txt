@@ -1,0 +1,20 @@
+0 - job completed successfully
+
+1 - 63 (job specific return codes)
+    (common job specific return codes)
+
+    //1 - 9 usuallly indicates permanent error (should abort the workflow)
+    1 - input error (job will fail everywhere)
+    2 - resource(memory?) error (job will fail everywhere)
+    9 - unknown error from the executable
+
+    //10 - 19 usually indicates temporarly error (should retry)
+    10 - failed to load input (should retry)
+    11 - produced invalid output (should retry)
+    12 - executable missing or failed to run (should retry)
+
+64 - failed to download node/npm
+65 - failed to install osg node package
+66 - timeout (as specified in osg submit option.timeout)
+67 - run.js failed to spawn requested executable (osg submit option.run)
+68 - failed to access oasis

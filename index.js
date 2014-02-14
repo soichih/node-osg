@@ -7,28 +7,53 @@ var temp = require('temp');
 var async = require('async');
 var which = require('which');
 
-//temp.track();
+//remove submit file created
+temp.track();
 
+//keep track of which jobs are running (that we need to abort in case of SIGTERM/SIGINT)
+var running = {};
+
+/*
+//some default osg options
 var osg_options = {
     env: {}
 };
+*/
+
+/*
 exports.init = function(options, callback) {
     osg_options = extend(osg_options, options);
 
     //nothing to initialize yet
     callback();
 }
+*/
 
 exports.submit = function(options, callbacks) {
-    options = extend({
-        env: {}
-    }, options);
 
-    options.send.push(__dirname+"/wn/osg");
-    options.send.push(__dirname+"/wn/run.js");
+    //some default
+    options = extend({
+        something: 'hoge',
+        receive: []
+    }, options); 
+
+    /*
+    //turn relative path to absolute 
+    options.send.forEach(function(send) {
+        if(send[0] != "/") { //TODO is this 
+        
+        }
+    });
+    */
+
+    //options.send.push(__dirname+"/wn/osg");
+    //options.send.push(__dirname+"/wn/run.js");
+
+    //always receive jobstats.csv
+    //options.receive.push('jobstats.txt');
 
     //initialize
-    async.parallel([
+    async.series([
         /*
         //send git executable
         function(next) {
@@ -42,6 +67,7 @@ exports.submit = function(options, callbacks) {
             });
         },
         */
+        /* -- TODO not that we are using initialdir, all path needs to be absolute
         //package.json
         function(next) {
             fs.exists('package.json', function(exists) {
@@ -51,16 +77,58 @@ exports.submit = function(options, callbacks) {
                 next();
             });
         },
-        //create tmp options.json (used to send options to wn)
+        */
+
+        //create rundir
         function(next) {
-            temp.open("osg-options.", function(err, ojson) { 
+            //console.log('start mkdir');
+            temp.mkdir('node-osg.rundir', function(err, rundir) { 
                 if(err) throw err;
-                fs.write(ojson.fd, JSON.stringify(options));
-                options.run = path.basename(ojson.path)+" "+options.run;
-                options.send.push(ojson.path);
-                next();
+                options.rundir = rundir;
+                if(callbacks.prepare) {
+                    callbacks.prepare(rundir, next);
+                } else {
+                    next();
+                }
             });
         },
+
+        /*
+        //symlink all relative input files to rundir
+        function(next) {
+            //console.log('start symlink');
+            if(options.send) {
+                var send_basenames = [];
+                async.forEach(options.send, function(send, next_send) {
+                    //if(send[0] != "/") {
+                    //always resolve send path
+                    var from = path.resolve(send);
+                    send_basename = path.basename(send);
+                    send_basenames.push(send_basename);
+                    //console.log("symlinking from "+from+" to "+options.rundir+"/"+send_basename);
+                    fs.symlink(from, options.rundir+"/"+send_basename, next_send);
+                    //TODO check to see file actually exists?
+                }, function() {
+                    options.send = send_basenames;
+                    next();
+                });
+            } else {
+                next();
+            }
+        },
+        */
+
+        //create tmp options.json (used to send options to wn)
+        function(next) {
+            fs.open(options.rundir+"/options.json", 'w', function(err, fd) { 
+                if(err) throw err;
+                fs.write(fd, JSON.stringify(options));
+                //options.run = path.basename(ojson.path)+" "+options.run;
+                //options.send.push("options.json");
+                fs.close(fd, next);
+            });
+        },
+
         //create tmp stdout
         function(next) {
             if(options.stdout) {
@@ -75,6 +143,7 @@ exports.submit = function(options, callbacks) {
                 });
             }
         },
+
         //create tmp stderr
         function(next) {
             if(options.stderr) {
@@ -86,88 +155,125 @@ exports.submit = function(options, callbacks) {
                     next();
                 });
             }
+        },
+
+        //list all files in rundir and send
+        function(next) {
+            fs.readdir(options.rundir, function(err, files) {
+                options.send = [];
+                files.forEach(function(file) {
+                    //console.log("senging:"+ file);
+                    options.send.push(file);
+                });
+                next();
+            });
         }
     ], function() {
+        //turn array arguments to a single string
+        if(Array.isArray(options.arguments)) {
+            options.arguments = options.arguments.join(" ");
+        }
+
+        //construct htcondor options
+        console.log('submitting');
         var submit_options = {
-            universe: "vanilla",
+            universe: 'vanilla',
 
-            executable: __dirname+"/wn/boot.sh",
-            arguments: options.run,
-            notification: "never",
+            //executable: __dirname+'/wn/boot.sh',
+            //arguments: options.run,
 
-            shouldtransferfiles: "yes",
-            when_to_transfer_output: "ON_EXIT",
+            executable: options.executable,
+            arguments: options.arguments,
+            notification: 'never',
+
+            initialdir: options.rundir,
+
+            should_transfer_files: 'YES',
+            when_to_transfer_output: 'ON_EXIT',
             transfer_input_files: options.send,
             transfer_output_files: options.receive,
+
             output: options.stdout,
             error: options.stderr,
+
             queue: 1
         };
 
-        //override with user submitted raw condor submit options
-        if(osg_options.submit) {
-            submit_options = extend(submit_options, osg_options.submit);
-        }
+        //add some condor override
+        submit_options = extend(submit_options, options.condor);
+
+        //console.dir(submit_options);
 
         htcondor.submit(submit_options).then(function(job) {
-            var joblog = job.log;
 
-            /*
-            var jobopts = job.options;
+            //short hand for options.initialdir.. (should I really do this??)
+            //job.rundir = options.rundir;
 
-            var submit_event = extend({}, joblog.props);
-
-            //a bit of fake to be props from xml joblog..
-            //console.log(joblog.jobid);
-            //var jobid = joblog.jobid.split(".");
-            submit_event.Proc = parseInt(job.id.proc);
-            submit_event.Cluster = parseInt(job.id.cluster);
-            //submit_event.MyType = "SubmitEvent"; //MyType is seto to "Job"..
-            
-            //we miss submit event because then() will be excuted *after* the job is submitted
-            //so, just to be more consistent, I fire submit_event just in case
-            if(callbacks.submit) {
-                callbacks.submit(job, submit_event);
-            }
-            */
-
-            //subscribe to joblog event
-            joblog.watch(function(event) {
+            running[job.id] = job;
+            job.log.watch(function(event) {
                 var callback = undefined;
+                var info = {/*_event: event*/}; //I might get rid of _event after all useful information is processed
 
                 //find callback to call
                 switch(event.MyType) {
+                //start status
                 case "GlobusSubmitEvent":
                 case "GridSubmitEvent":
                 case "SubmitEvent":
-                    callback = callbacks.submit; break;
+                    callback = callbacks.submit; 
+                    break;
+
+                //midle status
                 case "ExecuteEvent":
-                    callback = callbacks.execute; break;
+                    callback = callbacks.execute;
+                    break;
                 case "JobImageSizeEvent":
-                    callback = callbacks.progress; break; 
+                    callback = callbacks.progress; 
+                    info.Size = event.Size;
+                    info.MemoryUsage = event.MemoryUsage;
+                    info.ResidentSetSize = event.ResidentSetSize;
+                    break; 
                 case "ShadowExceptionEvent":
-                    callback = callbacks.exception; break;
+                    callback = callbacks.exception; 
+                    info.Message = event.Message;
+                    break;
                 case "JobHeldEvent":
                     callback = callbacks.held; break;
-                case "JobAbortedEvent":
-                    callback = callbacks.aborted; break;
-                case "JobTerminatedEvent":
-                    callback = callbacks.terminated; break;
                 case "JobEvictedEvent":
                     callback = callbacks.evicted; break;
                 case "JobReleaseEvent":
                     callback = callbacks.released; break;
                 case "JobDisconnectedEvent":
                     callback = callbacks.disconnected; break;
+
+                //terminal status
+                case "JobAbortedEvent":
+                    callback = callbacks.aborted; 
+
+                    delete running[job.id];
+                    job.log.unwatch();
+
+                    break;
+                case "JobTerminatedEvent":
+                    callback = callbacks.terminated; 
+
+                    delete running[job.id];
+                    job.log.unwatch();
+
+                    info.rundir = options.rundir;
+                    info.ret = event.ReturnValue;
+                    job.log.unwatch();
+                    break;
+
                 default:
                     console.log("unknown event type:"+event.MyType);
                 }
 
                 if(callback) {
-                    callback(job, event);
+                    callback(job, info);
                 } else {
-                    //dump event if it's not handled (should I?)
-                    console.dir(event);
+                    //TODO - dump un-handled event if it's on debug
+                    //console.dir(event);
                 }
             });
         }).done(function(err) {
@@ -178,12 +284,31 @@ exports.submit = function(options, callbacks) {
 
 //just wrappers around htcondor.
 exports.remove = function(job, callback) {
-    htcondor.remove(job, callback);
+    console.log("removing job:"+job.id);
+    return htcondor.remove(job, callback);
 }
 exports.hold = function(job, callback) {
-    htcondor.hold(job, callback);
+    return htcondor.hold(job, callback);
 }
 exports.release = function(job, callback) {
-    htcondor.release(job, callback);
+    return htcondor.release(job, callback);
+}
+exports.q = function(job, callback) {
+    return htcondor.q(job, callback);
 }
 
+//abort any jobs that are still running
+exports.removeall = function() {
+    for(var id in running) {
+        var job = running[id];
+        exports.remove(job);
+    }
+}
+
+process.on('SIGINT', function() {
+    exports.removeall();
+});
+
+process.on('SIGTERM', function() {
+    exports.removeall();
+})

@@ -1,0 +1,19 @@
+{
+    "name": "btsync job",
+    "version": "0.0.0",
+    "description": "btsync job",
+    "main": "job.js",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/soichih/osgjob-btsync"
+    },
+    "author": "Soichi Hayashi",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/soichih/osgjob-btsync"
+    },
+    "dependencies": {
+        "node-osg": "*",
+        "btsync-api": "*"
+    }
+}

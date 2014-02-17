@@ -1,3 +1,4 @@
+var events = require('events');
 var extend = require('util')._extend;
 var fs = require('fs');
 var path = require('path');
@@ -10,8 +11,9 @@ var which = require('which');
 //remove submit file created
 temp.track();
 
-//keep track of which jobs are running (that we need to abort in case of SIGTERM/SIGINT)
-var running = {};
+//keep track of which jobs are submitted (that we need to abort in case of SIGTERM/SIGINT)
+var submitted = {};
+exports.running = 0; //number of jobs currently running
 
 /*
 //some default osg options
@@ -29,7 +31,10 @@ exports.init = function(options, callback) {
 }
 */
 
-exports.submit = function(options, callbacks) {
+//callbacks are deprecated - use eventEmitter returned.
+exports.submit = function(options) {
+
+    var eventEmitter = new events.EventEmitter();
 
     //some default
     options = extend({
@@ -54,43 +59,27 @@ exports.submit = function(options, callbacks) {
 
     //initialize
     async.series([
-        /*
-        //send git executable
+        //create rundir if not specified (and call prepare if specified)
         function(next) {
-            which('git', function(err, path) {
-                if(err) {
-                    console.log("can't find git. please install it on the submit host");
-                } else {
-                    options.send.push(path);
-                    next();
+            if(!options.rundir) {
+                //just create an empty rundir
+                temp.mkdir('node-osg.rundir', function(err, rundir) { 
+                    if(err) throw err;
+                    options.rundir = rundir;
+                });
+            } else {
+                //rundir specified.. but is it a function?
+                if (typeof(options.rundir) == 'function') {
+                    temp.mkdir('node-osg.rundir', function(err, rundir) { 
+                        if(err) throw err;
+                        //let user populate rundir
+                        options.rundir(rundir, function() {
+                            options.rundir = rundir;
+                            next();
+                        });
+                    });
                 }
-            });
-        },
-        */
-        /* -- TODO not that we are using initialdir, all path needs to be absolute
-        //package.json
-        function(next) {
-            fs.exists('package.json', function(exists) {
-                if(exists) {
-                    options.send.push("package.json");
-                }
-                next();
-            });
-        },
-        */
-
-        //create rundir
-        function(next) {
-            //console.log('start mkdir');
-            temp.mkdir('node-osg.rundir', function(err, rundir) { 
-                if(err) throw err;
-                options.rundir = rundir;
-                if(callbacks.prepare) {
-                    callbacks.prepare(rundir, next);
-                } else {
-                    next();
-                }
-            });
+            }
         },
 
         /*
@@ -175,7 +164,7 @@ exports.submit = function(options, callbacks) {
         }
 
         //construct htcondor options
-        console.log('submitting');
+        //console.log('submitting');
         var submit_options = {
             universe: 'vanilla',
 
@@ -199,92 +188,149 @@ exports.submit = function(options, callbacks) {
             queue: 1
         };
 
+        if(options.description) {
+            submit_options["+Description"] = options.description;
+        }
+
         //add some condor override
         submit_options = extend(submit_options, options.condor);
-
-        //console.dir(submit_options);
-
         htcondor.submit(submit_options).then(function(job) {
 
-            //short hand for options.initialdir.. (should I really do this??)
-            //job.rundir = options.rundir;
+            eventEmitter.emit('submitted', job, {});
 
-            running[job.id] = job;
-            job.log.watch(function(event) {
-                var callback = undefined;
-                var info = {/*_event: event*/}; //I might get rid of _event after all useful information is processed
-
+            submitted[job.id] = job;
+            job.log.onevent(function(event) {
                 //find callback to call
                 switch(event.MyType) {
-                //start status
+                /* start events are most likely already posted to joblog, and Tail won't re-wide to receive them
+                   so you will never receive these events
                 case "GlobusSubmitEvent":
                 case "GridSubmitEvent":
                 case "SubmitEvent":
+                    console.dir(event);
                     callback = callbacks.submit; 
                     break;
+                */
 
-                //midle status
                 case "ExecuteEvent":
-                    callback = callbacks.execute;
+                    exports.running++;
+                    if(options.timeout) {
+                        job.timeout = setTimeout(function() {
+                            /*
+                            if(callbacks.timeout) {
+                                callbacks.timeout(job);
+                            } else {
+                                //default behavior of timeout is to kill this job
+                                console.log(job.id+" reached timeout of "+options.timeout+" msec. removing job");
+                                exports.remove(job);
+                            }
+                            */
+                            eventEmitter.emit('timeout', job);
+                        }, options.timeout);
+                    }
+                    eventEmitter.emit('execute', job, {
+                        _event: event
+                    });
                     break;
                 case "JobImageSizeEvent":
-                    callback = callbacks.progress; 
-                    info.Size = event.Size;
-                    info.MemoryUsage = event.MemoryUsage;
-                    info.ResidentSetSize = event.ResidentSetSize;
+                    eventEmitter.emit('progress', job, {
+                        Size: event.Size,
+                        MemoryUsage: event.MemoryUsage,
+                        ResidentSetSize: event.ResidentSetSize
+                    });
                     break; 
                 case "ShadowExceptionEvent":
-                    callback = callbacks.exception; 
-                    info.Message = event.Message;
+                    exports.running--;
+                    eventEmitter.emit('exception', job, {
+                        Message: event.Message
+                    });
                     break;
                 case "JobHeldEvent":
-                    callback = callbacks.held; break;
-                case "JobEvictedEvent":
-                    callback = callbacks.evicted; break;
+                    exports.running--;
+                    eventEmitter.emit('hold', job, {
+                        _event: event
+                    });
+                    break;
+                case "JobEvictedEvent": //TODO - is this terminal event?
+                    exports.running--;
+                    info = event; //TODO - pick thing we really care
+                    eventEmitter.emit('evict', job, {
+                        _event: event
+                    });
+                    break;
                 case "JobReleaseEvent":
-                    callback = callbacks.released; break;
+                    eventEmitter.emit('release', job, {
+                        _event: event
+                    });
+                    break;
                 case "JobDisconnectedEvent":
-                    callback = callbacks.disconnected; break;
+                    exports.running--;
+                    eventEmitter.emit('disconnect', job, {
+                        _event: event
+                    });
+                    break;
+                case "JobReconnectFailedEvent":
+                    exports.running--;
+                    eventEmitter.emit('reconnectfail', job, {
+                        _event: event
+                    });
+                    break;
 
                 //terminal status
                 case "JobAbortedEvent":
-                    callback = callbacks.aborted; 
-
-                    delete running[job.id];
-                    job.log.unwatch();
-
+                    exports.running--;
+                    cleanup(job);
+                    eventEmitter.emit('abort', job, {
+                        _event: event
+                    });
                     break;
                 case "JobTerminatedEvent":
-                    callback = callbacks.terminated; 
-
-                    delete running[job.id];
-                    job.log.unwatch();
-
-                    info.rundir = options.rundir;
-                    info.ret = event.ReturnValue;
-                    job.log.unwatch();
+                    exports.running--;
+                    cleanup(job);
+                    eventEmitter.emit('terminate', job, {
+                        rundir: options.rundir,
+                        ret: event.ReturnValue
+                    });
                     break;
-
                 default:
                     console.log("unknown event type:"+event.MyType);
                 }
+                /*
 
+                //callbacks are deprecated - use eventEmitter
                 if(callback) {
                     callback(job, info);
                 } else {
                     //TODO - dump un-handled event if it's on debug
-                    //console.dir(event);
+                    console.log("unhandled event");
+                    console.dir(event);
                 }
+                */
             });
         }).done(function(err) {
             if(err) throw err;
         });
     });
+
+    return eventEmitter;
+}
+
+//forget that this job ever existed
+function cleanup(job) {
+    //console.log("cleaning "+job.id);
+    job.log.unwatch();
+    if(job.timeout) {
+        //console.log("stopping timeout for "+job.id);
+        clearTimeout(job.timeout);
+        delete job.timeout;//necessary?
+    }
+    delete submitted[job.id];
 }
 
 //just wrappers around htcondor.
 exports.remove = function(job, callback) {
     console.log("removing job:"+job.id);
+    cleanup(job);
     return htcondor.remove(job, callback);
 }
 exports.hold = function(job, callback) {
@@ -297,10 +343,10 @@ exports.q = function(job, callback) {
     return htcondor.q(job, callback);
 }
 
-//abort any jobs that are still running
+//abort any jobs that are still submitted
 exports.removeall = function() {
-    for(var id in running) {
-        var job = running[id];
+    for(var id in submitted) {
+        var job = submitted[id];
         exports.remove(job);
     }
 }

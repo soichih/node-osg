@@ -1,6 +1,6 @@
 {
     "name": "osg",
-    "version": "0.0.20",
+    "version": "0.0.21",
     "description": "nodejs client libraries for Open Science Grid",
     "main": "index.js",
     "scripts": {

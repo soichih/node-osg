@@ -196,7 +196,7 @@ exports.submit = function(options) {
         submit_options = extend(submit_options, options.condor);
         htcondor.submit(submit_options).then(function(job) {
 
-            eventEmitter.emit('submitted', job, {});
+            eventEmitter.emit('submit', job, {});
 
             submitted[job.id] = job;
             job.log.onevent(function(event) {

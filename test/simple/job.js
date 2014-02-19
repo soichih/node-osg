@@ -19,6 +19,7 @@ fs.writeFile('output.txt', sum, function (err) {
 console.error("outputing something to stderr because I am bored");
 
 //simulate some job
+console.log("waiting for 30 seconds");
 setTimeout(function() {
     console.log("job ended");
-}, 1000);
+}, 1000*30);

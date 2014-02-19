@@ -13,7 +13,6 @@ temp.track();
 
 //keep track of which jobs are submitted (that we need to abort in case of SIGTERM/SIGINT)
 var submitted = {};
-exports.running = 0; //number of jobs currently running
 
 /*
 //some default osg options
@@ -66,6 +65,7 @@ exports.submit = function(options) {
                 temp.mkdir('node-osg.rundir', function(err, rundir) { 
                     if(err) throw err;
                     options.rundir = rundir;
+                    next();
                 });
             } else {
                 //rundir specified.. but is it a function?
@@ -158,10 +158,6 @@ exports.submit = function(options) {
             });
         }
     ], function() {
-        //turn array arguments to a single string
-        if(Array.isArray(options.arguments)) {
-            options.arguments = options.arguments.join(" ");
-        }
 
         //construct htcondor options
         //console.log('submitting');
@@ -172,7 +168,6 @@ exports.submit = function(options) {
             //arguments: options.run,
 
             executable: options.executable,
-            arguments: options.arguments,
             notification: 'never',
 
             initialdir: options.rundir,
@@ -188,6 +183,13 @@ exports.submit = function(options) {
             queue: 1
         };
 
+        if(options.arguments) {
+            //turn array arguments to a single string
+            if(Array.isArray(options.arguments)) {
+                options.arguments = options.arguments.join(" ");
+            }
+            submit_options.arguments = options.arguments;
+        }
         if(options.description) {
             submit_options["+Description"] = options.description;
         }
@@ -200,6 +202,10 @@ exports.submit = function(options) {
 
             submitted[job.id] = job;
             job.log.onevent(function(event) {
+
+                //debug
+                //console.dir(event);
+
                 //find callback to call
                 switch(event.MyType) {
                 /* start events are most likely already posted to joblog, and Tail won't re-wide to receive them
@@ -212,8 +218,18 @@ exports.submit = function(options) {
                     break;
                 */
 
+                //start status
                 case "ExecuteEvent":
-                    exports.running++;
+                    /*
+                    { MyType: 'ExecuteEvent',
+                      Proc: 0,
+                      Cluster: 54627595,
+                      EventTime: '2014-02-19T18:13:42',
+                      ExecuteHost: '<192.41.230.230:60271?CCBID=129.79.53.179:9813#67680&noUDP>',
+                      Subproc: 0,
+                      EventTypeNumber: 1,
+                      CurrentTime: 'expression:time()' }
+                    */
                     if(options.timeout) {
                         job.timeout = setTimeout(function() {
                             /*
@@ -225,6 +241,7 @@ exports.submit = function(options) {
                                 exports.remove(job);
                             }
                             */
+                            job.timeout = null; //necessary?
                             eventEmitter.emit('timeout', job);
                         }, options.timeout);
                     }
@@ -232,7 +249,21 @@ exports.submit = function(options) {
                         _event: event
                     });
                     break;
+
+                //transitional
                 case "JobImageSizeEvent":
+                    /*
+                    { Size: 1,
+                      MyType: 'JobImageSizeEvent',
+                      MemoryUsage: 3,
+                      Proc: 0,
+                      Cluster: 54628985,
+                      EventTime: '2014-02-19T18:17:31',
+                      Subproc: 0,
+                      EventTypeNumber: 6,
+                      CurrentTime: 'expression:time()',
+                      ResidentSetSize: 2744 }
+                    */
                     eventEmitter.emit('progress', job, {
                         Size: event.Size,
                         MemoryUsage: event.MemoryUsage,
@@ -240,58 +271,94 @@ exports.submit = function(options) {
                     });
                     break; 
                 case "ShadowExceptionEvent":
-                    exports.running--;
                     eventEmitter.emit('exception', job, {
                         Message: event.Message
                     });
                     break;
-                case "JobHeldEvent":
-                    exports.running--;
-                    eventEmitter.emit('hold', job, {
-                        _event: event
-                    });
-                    break;
-                case "JobEvictedEvent": //TODO - is this terminal event?
-                    exports.running--;
-                    info = event; //TODO - pick thing we really care
-                    eventEmitter.emit('evict', job, {
-                        _event: event
-                    });
-                    break;
+
                 case "JobReleaseEvent":
+                    /*
+                    { Reason: 'via condor_release (by user hayashis)',
+                         MyType: 'JobReleaseEvent',
+                         Proc: 0,
+                         Cluster: 54627595,
+                         EventTime: '2014-02-19T18:14:02',
+                         Subproc: 0,
+                         EventTypeNumber: 13,
+                         CurrentTime: 'expression:time()' }
+                    */
                     eventEmitter.emit('release', job, {
-                        _event: event
+                        Reason: event.Reason
                     });
                     break;
                 case "JobDisconnectedEvent":
-                    exports.running--;
                     eventEmitter.emit('disconnect', job, {
                         _event: event
                     });
                     break;
+
                 case "JobReconnectFailedEvent":
-                    exports.running--;
                     eventEmitter.emit('reconnectfail', job, {
                         _event: event
                     });
                     break;
+                case "JobEvictedEvent": 
+                    //called if someone call hold 
+                    //I am not sure if this fired when someone remove() job, but since we stop log.watch, we won't emit evict in any case
+                    eventEmitter.emit('evict', job, {
+                        _event: event
+                    });
+                    break;
 
-                //terminal status
+                //pause status
+                case "JobHeldEvent":
+                    /*
+                    <c>
+                        <a n="HoldReasonCode"><i>1</i></a>
+                        <a n="MyType"><s>JobHeldEvent</s></a>
+                        <a n="Proc"><i>0</i></a>
+                        <a n="Cluster"><i>54627270</i></a>
+                        <a n="EventTime"><s>2014-02-19T18:06:34</s></a>
+                        <a n="HoldReasonSubCode"><i>0</i></a>
+                        <a n="Subproc"><i>0</i></a>
+                        <a n="EventTypeNumber"><i>12</i></a>
+                        <a n="HoldReason"><s>via condor_hold (by user hayashis)</s></a>
+                        <a n="CurrentTime"><e>time()</e></a>
+                    </c>
+                    */
+                    stoptimer(job);
+                    eventEmitter.emit('hold', job, {
+                        HoldReasonCode: event.HoldReasonCode,
+                        HoldReasonSubCode: event.HoldReasonSubCode,
+                        HoldReason: event.HoldReason
+                    });
+                    break;
+
+                //terminal status (need to stop timer and cleanup the job)
                 case "JobAbortedEvent":
-                    exports.running--;
+                    /*
+                    { Reason: 'via condor_rm (by user hayashis)',
+                      MyType: 'JobAbortedEvent',
+                      Proc: 0,
+                      Cluster: 54629517,
+                      EventTime: '2014-02-19T18:18:23',
+                      Subproc: 0,
+                      EventTypeNumber: 9,
+                      CurrentTime: 'expression:time()' }
+                    */
                     cleanup(job);
                     eventEmitter.emit('abort', job, {
                         _event: event
                     });
                     break;
                 case "JobTerminatedEvent":
-                    exports.running--;
                     cleanup(job);
                     eventEmitter.emit('terminate', job, {
                         rundir: options.rundir,
                         ret: event.ReturnValue
                     });
                     break;
+
                 default:
                     console.log("unknown event type:"+event.MyType);
                 }
@@ -319,12 +386,15 @@ exports.submit = function(options) {
 function cleanup(job) {
     //console.log("cleaning "+job.id);
     job.log.unwatch();
+    stoptimer(job);
+    delete submitted[job.id];
+}
+function stoptimer(job) {
     if(job.timeout) {
         //console.log("stopping timeout for "+job.id);
         clearTimeout(job.timeout);
         delete job.timeout;//necessary?
     }
-    delete submitted[job.id];
 }
 
 //just wrappers around htcondor.

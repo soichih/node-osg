@@ -13,6 +13,7 @@
     11 - produced invalid output (should retry)
     12 - executable missing or failed to run (should retry)
     13 - program crashed due to some kind of bug (ncbi c++ exception)
+    14 - blast segfaulted
 
 64 - failed to download node/npm
 65 - failed to install osg node package

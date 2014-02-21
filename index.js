@@ -11,50 +11,71 @@ var which = require('which');
 //remove submit file created
 temp.track();
 
-//keep track of which jobs are submitted (that we need to abort in case of SIGTERM/SIGINT)
-var submitted = {};
+//list of all workflow created via this module (used to remove all jobs on all workflows)
+var workflows = [];
 
-/*
-//some default osg options
-var osg_options = {
-    env: {}
-};
-*/
+var Job = function(workflow) {
+    //public variables
+    this.id = null; //jobid. set when job is submitted
+    this.workflow = workflow; //parent workflow (not used yet?)
+    //this._submit = null; //submit info from condor
 
-/*
-exports.init = function(options, callback) {
-    osg_options = extend(osg_options, options);
-
-    //nothing to initialize yet
-    callback();
-}
-*/
-
-//callbacks are deprecated - use eventEmitter returned.
-exports.submit = function(options) {
-
+    //private variables
     var eventEmitter = new events.EventEmitter();
+    var joblog = null; //set when job is submitted
+
+    //var timeout = null; //started when job gets executed, and stopped when job gets held,aborted,terminated
+
+    //public functions 
+    this.on = function(event, callback) {
+        eventEmitter.on(event, callback);
+    }
+    this.emit = function(event, data) {
+        eventEmitter.emit(event, data);
+    }
+    this.remove = function(callback) {
+        console.log("removing job:"+this.id);
+        this.workflow.cleanup(this);
+        return htcondor.remove(this.id, callback);
+    }
+    this.hold = function(callback) {
+        return htcondor.hold(this.id, callback);
+    }
+    this.release = function(callback) {
+        return htcondor.release(this.id, callback);
+    }
+    this.q = function(callback) {
+        return htcondor.q(this.id, callback);
+    }
+}
+exports.Job = Job;
+
+var Workflow = function() {
+    this.submitted = {}; //jobs are submitted (that we need to abort in case of SIGTERM/SIGINT) by this workflow
+    workflows.push(this); //register this workflow to module workflow list
+}
+exports.Workflow = Workflow;
+
+Workflow.prototype.cleanup = function(job) {
+    //console.log("cleaning "+job.id);
+    if(job.timeout) {
+        clearTimeout(job.timeout);
+        delete job.timeout;
+    }
+    job.log.unwatch();
+    delete this.submitted[job.id];
+}
+
+Workflow.prototype.submit = function(options) {
+    var workflow = this;
+    var job = new Job(this);
 
     //some default
     options = extend({
         something: 'hoge',
+        send: [],
         receive: []
     }, options); 
-
-    /*
-    //turn relative path to absolute 
-    options.send.forEach(function(send) {
-        if(send[0] != "/") { //TODO is this 
-        
-        }
-    });
-    */
-
-    //options.send.push(__dirname+"/wn/osg");
-    //options.send.push(__dirname+"/wn/run.js");
-
-    //always receive jobstats.csv
-    //options.receive.push('jobstats.txt');
 
     //initialize
     async.series([
@@ -68,7 +89,7 @@ exports.submit = function(options) {
                     next();
                 });
             } else {
-                //rundir specified.. but is it a function?
+                //rundir specified by user.. but is it a function?
                 if (typeof(options.rundir) == 'function') {
                     temp.mkdir('node-osg.rundir', function(err, rundir) { 
                         if(err) throw err;
@@ -107,6 +128,7 @@ exports.submit = function(options) {
         },
         */
 
+        /*
         //create tmp options.json (used to send options to wn)
         function(next) {
             fs.open(options.rundir+"/options.json", 'w', function(err, fd) { 
@@ -117,6 +139,7 @@ exports.submit = function(options) {
                 fs.close(fd, next);
             });
         },
+        */
 
         //create tmp stdout
         function(next) {
@@ -124,12 +147,17 @@ exports.submit = function(options) {
                 //user specified
                 next();
             } else {
+                /*
                 //creat temp one
-                temp.open("osg-stdout.", function(err, tmp) { 
+                temp.open({dir: options.rundir, prefix:"osg-stdout."}, function(err, tmp) { 
                     if(err) throw err;
+                    console.log("using stdout path:"+tmp.path);
                     options.stdout = tmp.path; 
                     next();
                 });
+                */
+                options.stdout = options.rundir+"/stdout.out";
+                next();
             }
         },
 
@@ -138,11 +166,15 @@ exports.submit = function(options) {
             if(options.stderr) {
                 next();
             } else {
+                /*
                 temp.open('osg-stderr.', function(err, tmp) { 
                     if(err) throw err;
                     options.stderr = tmp.path; 
                     next();
                 });
+                */
+                options.stderr = options.rundir+"/stderr.out";
+                next();
             }
         },
 
@@ -151,21 +183,14 @@ exports.submit = function(options) {
             fs.readdir(options.rundir, function(err, files) {
                 options.send = [];
                 files.forEach(function(file) {
-                    //console.log("senging:"+ file);
                     options.send.push(file);
                 });
                 next();
             });
         }
     ], function() {
-
-        //construct htcondor options
-        //console.log('submitting');
         var submit_options = {
             universe: 'vanilla',
-
-            //executable: __dirname+'/wn/boot.sh',
-            //arguments: options.run,
 
             executable: options.executable,
             notification: 'never',
@@ -174,14 +199,21 @@ exports.submit = function(options) {
 
             should_transfer_files: 'YES',
             when_to_transfer_output: 'ON_EXIT',
-            transfer_input_files: options.send,
-            transfer_output_files: options.receive,
 
             output: options.stdout,
             error: options.stderr,
 
             queue: 1
         };
+
+
+        if(options.receive.length > 0) {
+            submit_options.transfer_output_files = options.receive;
+        }
+
+        if(options.send.length > 0) {
+            submit_options.transfer_input_files = options.send;
+        }
 
         if(options.arguments) {
             //turn array arguments to a single string
@@ -193,19 +225,27 @@ exports.submit = function(options) {
         if(options.description) {
             submit_options["+Description"] = options.description;
         }
+        if(options.debug) {
+            submit_options.debug = options.debug;
+        }
 
         //add some condor override
         submit_options = extend(submit_options, options.condor);
-        htcondor.submit(submit_options).then(function(job) {
 
-            eventEmitter.emit('submit', job, {});
+        job.rundir = options.rundir;
+        job.stdout = options.stdout;
+        job.stderr = options.stderr;
 
-            submitted[job.id] = job;
+        //finally, submit to condor
+        htcondor.submit(submit_options).then(function(condorjob) {
+            //set info..
+            job.id = condorjob.id;
+            job.log = condorjob.log;
+            //job._submit = condorjob; //set other things.. that might come in handy
+            workflow.submitted[condorjob.id] = job;
+
+            //console.log("htcondor submitted..calling onevent");
             job.log.onevent(function(event) {
-
-                //debug
-                //console.dir(event);
-
                 //find callback to call
                 switch(event.MyType) {
                 /* start events are most likely already posted to joblog, and Tail won't re-wide to receive them
@@ -231,23 +271,16 @@ exports.submit = function(options) {
                       CurrentTime: 'expression:time()' }
                     */
                     if(options.timeout) {
+                        if(job.timeout) {
+                            console.log("this shouldn't happen, but timeout is already running on ExecutEvent.. clearing");
+                            clearTimeout(job.timeout);
+                        }
                         job.timeout = setTimeout(function() {
-                            /*
-                            if(callbacks.timeout) {
-                                callbacks.timeout(job);
-                            } else {
-                                //default behavior of timeout is to kill this job
-                                console.log(job.id+" reached timeout of "+options.timeout+" msec. removing job");
-                                exports.remove(job);
-                            }
-                            */
-                            job.timeout = null; //necessary?
-                            eventEmitter.emit('timeout', job);
+                            job.emit('timeout');
+                            delete job.timeout; //necessary?
                         }, options.timeout);
                     }
-                    eventEmitter.emit('execute', job, {
-                        _event: event
-                    });
+                    job.emit('execute', {});
                     break;
 
                 //transitional
@@ -264,14 +297,22 @@ exports.submit = function(options) {
                       CurrentTime: 'expression:time()',
                       ResidentSetSize: 2744 }
                     */
-                    eventEmitter.emit('progress', job, {
+                    var info = {
                         Size: event.Size,
                         MemoryUsage: event.MemoryUsage,
                         ResidentSetSize: event.ResidentSetSize
-                    });
+                    };
+                    job.emit('imagesize', info);
+                    job.emit('progress', info); //deprecated (use imagesize instead)
                     break; 
                 case "ShadowExceptionEvent":
-                    eventEmitter.emit('exception', job, {
+                    if(job.timeout) {
+                        console.log("stopping timer due to exception thrown");
+                        clearTimeout(job.timeout);
+                        delete job.timeout;
+                    }
+
+                    job.emit('exception', {
                         Message: event.Message
                     });
                     break;
@@ -287,26 +328,54 @@ exports.submit = function(options) {
                          EventTypeNumber: 13,
                          CurrentTime: 'expression:time()' }
                     */
-                    eventEmitter.emit('release', job, {
+                    job.emit('release', {
                         Reason: event.Reason
                     });
                     break;
+
                 case "JobDisconnectedEvent":
-                    eventEmitter.emit('disconnect', job, {
+                    job.emit('disconnect', {
                         _event: event
                     });
                     break;
 
                 case "JobReconnectFailedEvent":
-                    eventEmitter.emit('reconnectfail', job, {
+                    job.emit('reconnectfail', {
                         _event: event
                     });
                     break;
                 case "JobEvictedEvent": 
-                    //called if someone call hold 
+                    //called if someone call condor_hold 
                     //I am not sure if this fired when someone remove() job, but since we stop log.watch, we won't emit evict in any case
-                    eventEmitter.emit('evict', job, {
-                        _event: event
+                    /*
+                    { Proc: 0,
+                         EventTime: '2014-02-20T01:27:36',
+                         RunRemoteUsage: 'Usr 0 00:00:00, Sys 0 00:00:00',
+                         RunLocalUsage: 'Usr 0 00:00:00, Sys 0 00:00:00',
+                         SentBytes: 0,
+                         MyType: 'JobEvictedEvent',
+                         TerminatedAndRequeued: false,
+                         Checkpointed: false,
+                         Cluster: 54671750,
+                         Subproc: 0,
+                         CurrentTime: 'expression:time()',
+                         EventTypeNumber: 4,
+                         TerminatedNormally: false,
+                         ReceivedBytes: 702 }
+                    */
+
+                    if(job.timeout) {
+                        console.log("hold call back should handle timeout, so not sure if this is necessary, but... just in case");
+                        clearTimeout(job.timeout);
+                        delete job.timeout;
+                    }
+
+                    job.emit('evict', {
+                        SentBytes: event.SentBytes,
+                        TerminatedAndRequeued: event.TerminatedAndRequeued,
+                        Checkpointed: event.Checkpointed,
+                        TerminatedNormally: event.TerminatedNormally,
+                        ReceivedBytes: event.ReceivedBytes
                     });
                     break;
 
@@ -326,8 +395,11 @@ exports.submit = function(options) {
                         <a n="CurrentTime"><e>time()</e></a>
                     </c>
                     */
-                    stoptimer(job);
-                    eventEmitter.emit('hold', job, {
+                    if(job.timeout) {
+                        clearTimeout(job.timeout);
+                        delete job.timeout;
+                    }
+                    job.emit('hold', {
                         HoldReasonCode: event.HoldReasonCode,
                         HoldReasonSubCode: event.HoldReasonSubCode,
                         HoldReason: event.HoldReason
@@ -346,15 +418,14 @@ exports.submit = function(options) {
                       EventTypeNumber: 9,
                       CurrentTime: 'expression:time()' }
                     */
-                    cleanup(job);
-                    eventEmitter.emit('abort', job, {
-                        _event: event
+                    workflow.cleanup(job);
+                    job.emit('abort', {
+                        Reason: event.Reason
                     });
                     break;
                 case "JobTerminatedEvent":
-                    cleanup(job);
-                    eventEmitter.emit('terminate', job, {
-                        rundir: options.rundir,
+                    workflow.cleanup(job);
+                    job.emit('terminate', {
                         ret: event.ReturnValue
                     });
                     break;
@@ -362,69 +433,39 @@ exports.submit = function(options) {
                 default:
                     console.log("unknown event type:"+event.MyType);
                 }
-                /*
-
-                //callbacks are deprecated - use eventEmitter
-                if(callback) {
-                    callback(job, info);
-                } else {
-                    //TODO - dump un-handled event if it's on debug
-                    console.log("unhandled event");
-                    console.dir(event);
-                }
-                */
             });
-        }).done(function(err) {
-            if(err) throw err;
+
+            //finally, notify our user of submit event
+            //console.log("condor submitted");
+            job.emit('submit', condorjob);
+        }, function(err) {
+            //htcondor.submit reject
+            console.error("htcondor.submit failed");
+            throw err;
         });
     });
 
-    return eventEmitter;
-}
-
-//forget that this job ever existed
-function cleanup(job) {
-    //console.log("cleaning "+job.id);
-    job.log.unwatch();
-    stoptimer(job);
-    delete submitted[job.id];
-}
-function stoptimer(job) {
-    if(job.timeout) {
-        //console.log("stopping timeout for "+job.id);
-        clearTimeout(job.timeout);
-        delete job.timeout;//necessary?
-    }
-}
-
-//just wrappers around htcondor.
-exports.remove = function(job, callback) {
-    console.log("removing job:"+job.id);
-    cleanup(job);
-    return htcondor.remove(job, callback);
-}
-exports.hold = function(job, callback) {
-    return htcondor.hold(job, callback);
-}
-exports.release = function(job, callback) {
-    return htcondor.release(job, callback);
-}
-exports.q = function(job, callback) {
-    return htcondor.q(job, callback);
+    return job;
 }
 
 //abort any jobs that are still submitted
-exports.removeall = function() {
-    for(var id in submitted) {
-        var job = submitted[id];
-        exports.remove(job);
+Workflow.prototype.removeall = function() {
+    for(var id in this.submitted) {
+        var job = this.submitted[id];
+        job.remove();
     }
-}
-
+    this.submitted = [];
+} 
+    
+//remove all jobs on all workflows
 process.on('SIGINT', function() {
-    exports.removeall();
+    workflows.forEach(function(workflow) {
+        workflow.removeall();
+    });
+});
+process.on('SIGTERM', function() {
+    workflows.forEach(function(workflow) {
+        workflow.removeall();
+    });
 });
 
-process.on('SIGTERM', function() {
-    exports.removeall();
-})

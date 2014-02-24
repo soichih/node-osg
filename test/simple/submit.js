@@ -30,6 +30,10 @@ job.on('submit', function(info) {
     console.log("submitted");
     console.dir(info);
 });
+job.on('submitfail', function(info) {
+    console.log("submission failed");
+    console.dir(info);
+});
 job.on('execute', function(info) {
     console.log("job executing");
     console.dir(info);

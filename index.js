@@ -52,9 +52,45 @@ exports.Job = Job;
 
 var Workflow = function() {
     this.submitted = {}; //jobs are submitted (that we need to abort in case of SIGTERM/SIGINT) by this workflow
+
+    this.runtime_stats = {
+        hosts: {} //list of hosts where jobs are submitted (and counts for each return codes)
+    };
+
     workflows.push(this); //register this workflow to module workflow list
 }
 exports.Workflow = Workflow;
+
+//for storing statistics
+Workflow.prototype.get_runtime_stats = function(resource_name) {
+    //init host stats
+    if(!this.runtime_stats.hosts[resource_name]) { 
+        this.runtime_stats.hosts[resource_name] = {
+            total_walltime: 0,
+            exceptions: [],
+            holds: [],
+            counts: {}, //number of time it ran on this host
+        }
+    } 
+    return this.runtime_stats.hosts[resource_name];
+}
+Workflow.prototype.store_runtime = function(job, info) {
+    //console.log("adding runtime stats:"+job.id)
+    var stat = this.get_runtime_stats(job.resource_name);
+    stat.total_walltime += info.walltime;
+    if(!stat.counts[info.ret]) {
+        stat.counts[info.ret] = 0;
+    }
+    stat.counts[info.ret]++;
+}
+Workflow.prototype.store_exception = function(job, message) {
+    var stat = this.get_runtime_stats(job.resource_name);
+    stat.exceptions.push(message);
+}
+Workflow.prototype.store_hold = function(job, info) {
+    var stat = this.get_runtime_stats(job.resource_name);
+    stat.holds.push(info);
+}
 
 Workflow.prototype.cleanup = function(job) {
     //console.log("cleaning "+job.id);
@@ -62,6 +98,7 @@ Workflow.prototype.cleanup = function(job) {
         clearTimeout(job.timeout);
         delete job.timeout;
     }
+    //console.log("unwatching:"+job.id);
     job.log.unwatch();
     delete this.submitted[job.id];
 }
@@ -238,25 +275,34 @@ Workflow.prototype.submit = function(options) {
 
         //finally, submit to condor
         htcondor.submit(submit_options).then(function(condorjob) {
+
             //set info..
             job.id = condorjob.id;
             job.log = condorjob.log;
-            //job._submit = condorjob; //set other things.. that might come in handy
             workflow.submitted[condorjob.id] = job;
+
+            job.emit('submit', condorjob);
 
             //console.log("htcondor submitted..calling onevent");
             job.log.onevent(function(event) {
+
+                if(options.debug) {
+                    //debug
+                    console.dir(event);
+                }
+
                 //find callback to call
                 switch(event.MyType) {
-                /* start events are most likely already posted to joblog, and Tail won't re-wide to receive them
-                   so you will never receive these events
+                /* start events are most likely already posted to joblog at the time we get here
+                   so I don't *usually* get these events (tail can't rewind), although sometimes I get SubmitEvent
+                   which is why I am sending my own submit event above.
+                */
                 case "GlobusSubmitEvent":
                 case "GridSubmitEvent":
                 case "SubmitEvent":
-                    console.dir(event);
-                    callback = callbacks.submit; 
+                    //console.log("received job events that I shouldn't be receiving..");
+                    //console.dir(event);
                     break;
-                */
 
                 //start status
                 case "ExecuteEvent":
@@ -270,6 +316,8 @@ Workflow.prototype.submit = function(options) {
                       EventTypeNumber: 1,
                       CurrentTime: 'expression:time()' }
                     */
+                    job.starttime = new Date();
+
                     if(options.timeout) {
                         if(job.timeout) {
                             console.log("this shouldn't happen, but timeout is already running on ExecutEvent.. clearing");
@@ -280,9 +328,15 @@ Workflow.prototype.submit = function(options) {
                             delete job.timeout; //necessary?
                         }, options.timeout);
                     }
-                    job.emit('execute', {});
-                    break;
 
+                    job.q(function(err, info) {
+                        //TODO - can we make this submit host generic?
+                        job.resource_name = info.MATCH_EXP_JOBGLIDEIN_ResourceName;
+                        job.machine_name = info.MachineAttrName0;
+
+                        job.emit('execute', info);
+                    });
+                    break;
                 //transitional
                 case "JobImageSizeEvent":
                     /*
@@ -312,9 +366,24 @@ Workflow.prototype.submit = function(options) {
                         delete job.timeout;
                     }
 
-                    job.emit('exception', {
-                        Message: event.Message
-                    });
+                    if(job.resource_name) {
+                        job.emit('exception', {
+                            Message: event.Message
+                        });
+                        workflow.store_exception(job, event.Message);
+                    } else {
+                        //sometime exeption happens before execute event.. pull resource name so that I can
+                        //report where the error message happens
+                        job.q(function(err, info) {
+                            job.resource_name = info.MATCH_EXP_JOBGLIDEIN_ResourceName;
+                            job.machine_name = info.MachineAttrName0;
+                            job.emit('exception', {
+                                Message: event.Message
+                            });
+                            workflow.store_exception(job, event.Message);
+                        });
+                    }
+
                     break;
 
                 case "JobReleaseEvent":
@@ -399,11 +468,13 @@ Workflow.prototype.submit = function(options) {
                         clearTimeout(job.timeout);
                         delete job.timeout;
                     }
-                    job.emit('hold', {
+                    var info = {
                         HoldReasonCode: event.HoldReasonCode,
                         HoldReasonSubCode: event.HoldReasonSubCode,
                         HoldReason: event.HoldReason
-                    });
+                    };
+                    workflow.store_hold(job, info);
+                    job.emit('hold', info);
                     break;
 
                 //terminal status (need to stop timer and cleanup the job)
@@ -418,30 +489,28 @@ Workflow.prototype.submit = function(options) {
                       EventTypeNumber: 9,
                       CurrentTime: 'expression:time()' }
                     */
-                    workflow.cleanup(job);
                     job.emit('abort', {
                         Reason: event.Reason
                     });
+                    workflow.cleanup(job);
                     break;
                 case "JobTerminatedEvent":
-                    workflow.cleanup(job);
-                    job.emit('terminate', {
-                        ret: event.ReturnValue
-                    });
-                    break;
+                    job.endtime = new Date();
 
+                    var info = {
+                        ret: event.ReturnValue,
+                        walltime: job.endtime - job.starttime
+                    };
+                    workflow.store_runtime(job, info);
+                    job.emit('terminate', info);
+                    workflow.cleanup(job);
+                    break;
                 default:
                     console.log("unknown event type:"+event.MyType);
                 }
             });
-
-            //finally, notify our user of submit event
-            //console.log("condor submitted");
-            job.emit('submit', condorjob);
-        }, function(err) {
-            //htcondor.submit reject
-            console.error("htcondor.submit failed");
-            throw err;
+        }).catch(function(err) {
+            job.emit('submitfail', err);
         });
     });
 
@@ -459,11 +528,13 @@ Workflow.prototype.removeall = function() {
     
 //remove all jobs on all workflows
 process.on('SIGINT', function() {
+    console.log("node-osg received SIGINT(ctrl+c)");
     workflows.forEach(function(workflow) {
         workflow.removeall();
     });
 });
 process.on('SIGTERM', function() {
+    console.log("node-osg received SIGTERM(kill)");
     workflows.forEach(function(workflow) {
         workflow.removeall();
     });

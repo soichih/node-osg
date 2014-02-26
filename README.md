@@ -8,190 +8,112 @@ As this is a node client, node executable will be automatically shipped to the r
 ## Submit job and monitor events
 
 ```
-var osg = require('node-osg');
+var osg = require('osg');
 var fs = require('fs');
+var path = require('path');
 
-osg.init({
-    //only needed to run jobs on osg-xsede
-    submit: { "+ProjectName": "CSIU" }
-}, function() {
-    //now it's ready to start submitting jobs
-    osg.submit({
-        send: ['job.js'],  
-        //receive: ['output.txt'], //don't set this if you want receive all *files* (not directory) created in the wn/cwd.
-        run: 'node job.js', //command to run
-        
-        //env parameters to pass to my job
-        env: {name: "soichi"},
-        
-        timeout: 60*10 //kill job in 10 minutes (should take less than seconds to run)
-    }, {
-        submit: function(job, event) {
-            console.log("job submitted");
-            console.dir(event);
-        },
-        execute: function(job, event) {
-            console.log("job executing");
-            console.dir(event);
-        },
-        image_size: function(job, event) {
-            console.log("image_size");
-            console.dir(event);
+var workflow = new osg.Workflow();
 
-            //you can monitor the job and remove / hold job from submission end.
-            //job.log.unwatch(); //stop watcher for this job
-            //osg.remove(job);
+var job = workflow.submit({
+    executable: 'job.sh', //executable to send & run (usually a shell script)
 
-            //osg.hold(job);
-        },
-        exception: function(job, event) {
-            console.log("exception");
-            console.dir(event);
-            job.log.unwatch(); //stop watcher for this job
-        },
-        held: function(job, event) {
-            console.log("job held");
-            //console.dir(job);
-            console.dir(event);
-            fs.readFile(job.options.output, 'utf8', function (err,data) {
-                console.log(data);
-            });
-            fs.readFile(job.options.error, 'utf8', function (err,data) {
-                console.log(data);
-            });
+    //timeout event will be fired after this timeout.
+    //timer will start when job starts executing and stopped if it's held, or terminated
+    timeout: 15*1000, //(timer will stop if job terminates, hold, etc)
 
-            //if you want, you can release the job
-            console.log("releasing job");
-            osg.release(job);
-        },
-        evicted: function(job, event) {
-            console.log("job evicted");
-            console.dir(event);
-            job.log.unwatch(); //stop watcher for this job
-        },
-        terminated: function(job, event) {
-            console.log("job terminated");
-
-            console.dir(job);
-            console.dir(event);
-
-            fs.readFile(job.options.output, 'utf8', function (err,data) {
-                console.log(data);
-            }); 
-
-            fs.readFile(job.options.error, 'utf8', function (err,data) {
-                console.log(data);
-            }); 
-
-            //analyze event.ReturnValue and decide what to do next (submit another job, etc..)
-
-            job.log.unwatch(); //stop watcher for this job
-        }
+    //set call back function to stage any input files (or symlink to the actual file)
+    //that you wish to send to the remote hosts
+    rundir: function(rundir, next) {
+        console.log("using rundir:"+rundir);
+        fs.symlink(path.resolve('job.js'), rundir+"/job.js", next);
+    }
+});
+job.on('submit', function(info) {
+    console.log("submitted");
+    console.dir(info);
+});
+job.on('submitfail', function(info) {
+    console.log("submission failed");
+    console.dir(info);
+});
+job.on('execute', function(info) {
+    console.log("job executing");
+    console.dir(info);
+    job.q(function(err, data) {
+        console.dir(data);
+        console.log("running on "+data.MATCH_EXP_JOB_Site);
     });
 });
-
-```
-
-job.js is just a test script that output stuff to console.log and console.error.
-
-```
-var fs = require('fs');
-
-console.log("I am job.js")
-
-console.log("creating an array");
-var num = [];
-for(var i = 0;i < 100;++i) {
-    num[i] = i;
-}
-console.log("reducing to 1 sum");
-var sum = num.reduce(function(sum, n) {
-    return sum + n;
+job.on('progress', function(info) {
+    console.log("progressing / image_size");
+    console.dir(info);
 });
-
-//output result
-fs.writeFile('output.txt', sum, function (err) {
-    if (err) throw err;
+job.on('exception', function(info) {
+    console.log("exception");
+    console.dir(info);
 });
-
-console.error("outputing something to stderr because I am bored");
-
-//simulate some job
-setTimeout(function() {
-    console.log("job ended");
-}, 1000*10);
-
-```
-
-Sample output
-
-```
-2014-01-16 19:54:09 UTC [hayashis@soichi6]$ node submit.js
-submit path:/tmp/tmp-31624e9w1qo0.tmp
-job submitted
-{ MyType: 'SubmitEvent',
-  SubmitHost: '<129.79.53.144:20862>',
-  Proc: 0,
-  Cluster: 379,
-  EventTime: '2014-01-16T19:54:12',
-  Subproc: 0,
-  EventTypeNumber: 0,
-  CurrentTime: 'expression:time()' }
-job making progress
-{ MyType: 'ExecuteEvent',
-  Proc: 0,
-  Cluster: 379,
-  EventTime: '2014-01-16T19:54:15',
-  ExecuteHost: '<129.79.53.144:22342>',
-  Subproc: 0,
-  EventTypeNumber: 1,
-  CurrentTime: 'expression:time()' }
-job making progress
-{ MyType: 'JobImageSizeEvent',
-  Size: 1,
-  MemoryUsage: 0,
-  Proc: 0,
-  Cluster: 379,
-  EventTime: '2014-01-16T19:54:15',
-  Subproc: 0,
-  EventTypeNumber: 6,
-  CurrentTime: 'expression:time()',
-  ResidentSetSize: 0 }
-job fisnished successfully
-{ MyType: 'JobTerminatedEvent',
-  TotalLocalUsage: 'Usr 0 00:00:00, Sys 0 00:00:00',
-  Proc: 0,
-  EventTime: '2014-01-16T19:54:15',
-  TotalRemoteUsage: 'Usr 0 00:00:00, Sys 0 00:00:00',
-  TotalReceivedBytes: 10968307,
-  ReturnValue: 0,
-  RunRemoteUsage: 'Usr 0 00:00:00, Sys 0 00:00:00',
-  RunLocalUsage: 'Usr 0 00:00:00, Sys 0 00:00:00',
-  SentBytes: 190,
-  Cluster: 379,
-  TotalSentBytes: 190,
-  Subproc: 0,
-  CurrentTime: 'expression:time()',
-  EventTypeNumber: 5,
-  ReceivedBytes: 10968307,
-  TerminatedNormally: false }
-```
-
-If you want to submit to a remote cluster (via grid universe) add submit options inside your osg.init like so..
-
-```
-osg.init({
-    //needed to submit to remote cluster
-    submit: {
-        universe: "grid",
-        grid_resource: "gt2 ce.grid.iu.edu/jobmanager-condor"
+job.on('timeout', function(info) {
+    console.log("job timedout - holding job");
+    console.dir(info);
+    job.hold();
+});
+job.on('evict', function(info) {
+    console.log("job evicted");
+    console.dir(info);
+});
+job.on('release', function(info) {
+    console.log("job released");
+    console.dir(info);
+});
+job.on('hold', function(info) {
+    console.log("job held");
+    console.dir(info);
+    //job.release();
+});
+job.on('terminate', function(info) {
+    console.log("job terminateD");
+    console.dir(info);
+    if(info.ret == 0) {
+        fs.readFile(job.stdout, 'utf8', function (err,data) {
+            console.log(data);
+        }); 
+        fs.readFile(job.stderr, 'utf8', function (err,data) {
+            console.log(data);
+        }); 
+        fs.readFile(job.rundir+"/output.txt", 'utf8', function(err, data) {
+            if(err) throw err;
+            console.log(data.substring(0, 3000));
+        });
+    } else {
+        fs.readFile(job.stdout, 'utf8', function (err,data) {
+            console.log(data);
+        }); 
+        fs.readFile(job.stderr, 'utf8', function (err,data) {
+            console.log(data);
+        }); 
     }
-}, function() {
-    submit();
 });
 
 ```
 
-If you want to submit specific jobs to specific cluster, then you can add those submit options for each jobs instead of adding them on osg.init()
+If you want to submit via grid universe.. or set any other condor options, pass condor object containing
+all attributes that you want to set in the submit file.
+```
+var condor = {
+    //setting universe
+    universe: "grid",
+    grid_resource: "gt2 ce.grid.iu.edu/jobmanager-condor"
 
-Please see /test directory for more sample codes
+    //or set any other condor options
+    "+ProjectName": "CSIU",
+    "+PortalUser": "hayashis",
+    "Requirements": "(GLIDEIN_ResourceName =!= \"cinvestav\") && (GLIDEIN_ResourceName =!= \"SPRACE\") && (GLIDEIN_ResourceName =!= \"Nebraska\") && (HAS_CVMFS_oasis_opensciencegrid_org =?= True) && (Memory >= 2000) && (Disk >= 100*1024*1024)"
+}
+var workflow = new osg.Workflow();
+
+var job = workflow.submit({
+    executable: 'job.sh', //executable to send & run (usually a shell script)
+    condor: condor
+});
+```
+

@@ -15,12 +15,14 @@ var workflow = new osg.Workflow();
 
 var job = workflow.submit({
     executable: 'job.sh', //executable to send & run (usually a shell script)
-    env: {name: "soichi"}, //env parameters used by run.js (part of wn)
-
-    //receive: ['nothing'],
     condor: condor,
-    //timeout: 15*1000, //(timer will stop if job terminates, hold, etc)
-    //call to place files in rundir before submitting. any files / symlinks created here will be send to the remote job
+
+    //timeout event will be fired after this timeout.
+    //timer will start when job starts executing and stopped if it's held, or terminated
+    timeout: 15*1000, 
+
+    //set call back function to stage any input files (or symlink to the actual file)
+    //that you wish to send to the remote hosts
     rundir: function(rundir, next) {
         console.log("using rundir:"+rundir);
         fs.symlink(path.resolve('job.js'), rundir+"/job.js", next);
@@ -49,14 +51,6 @@ job.on('progress', function(info) {
 job.on('exception', function(info) {
     console.log("exception");
     console.dir(info);
-    /*
-    fs.readFile(job.options.output, 'utf8', function (err,data) {
-        console.log(data);
-    });
-    fs.readFile(job.options.error, 'utf8', function (err,data) {
-        console.log(data);
-    });
-    */
 });
 job.on('timeout', function(info) {
     console.log("job timedout - removing");

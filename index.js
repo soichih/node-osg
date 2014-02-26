@@ -47,6 +47,11 @@ var Job = function(workflow) {
     this.q = function(callback) {
         return htcondor.q(this.id, callback);
     }
+
+    //not sure what I do with these yet,
+    this.max_image_size = 0;
+    this.max_memory_usage = 0;
+    this.max_resident_set_size = 0;
 }
 exports.Job = Job;
 
@@ -56,12 +61,16 @@ var Workflow = function() {
     this.runtime_stats = {
         hosts: {} //list of hosts where jobs are submitted (and counts for each return codes)
     };
+    this.starttime = new Date();
 
     workflows.push(this); //register this workflow to module workflow list
 }
 exports.Workflow = Workflow;
 
-//for storing statistics
+///////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// for storing statistics
+//
 Workflow.prototype.get_runtime_stats = function(resource_name) {
     //init host stats
     if(!this.runtime_stats.hosts[resource_name]) { 
@@ -91,14 +100,95 @@ Workflow.prototype.store_hold = function(job, info) {
     var stat = this.get_runtime_stats(job.resource_name);
     stat.holds.push(info);
 }
+Workflow.prototype.print_runtime_stats = function(job, info) {
+    var out = "";
+    var total_jobs = 0;
+    //var total_walltime = 0;
+    out += "---------------------------------------------------------------------------\n";
+    out += "Workflow Statistics \n";
+    out += "---------------------------------------------------------------------------\n";
+    for(var host in this.runtime_stats.hosts) {
+        var stat = this.runtime_stats.hosts[host];
+        /*
+        "SMU_HPC": {
+          "total_walltime": 12328250,
+          "exceptions": [],
+          "holds": [],
+          "counts": {
+            "0": 93
+          }
+        },
+        */
+
+        //count jobs
+        var count_detail = "";
+        var total_jobs_host = 0;
+        for(var ret in stat.counts) {
+            var count = stat.counts[ret];
+
+            var code;
+            switch(parseInt(ret)) {
+            case 0: code = "success";break;
+            case 1: code = "input error";break;
+            case 2: code = "resource issue";break;
+            case 9: code = "unknown blast error";break;
+            case 10: code = "failed to load input";break;
+            case 11: code = "invalid output";break;
+            //TODO add others..
+            default:
+                code = "code:"+ret;
+
+            }
+            count_detail+= code+":"+count+" ";
+            total_jobs_host += count;
+        };
+
+        total_jobs += total_jobs_host;
+
+        //start output
+        var avg_walltime = stat.total_walltime / total_jobs_host;
+        out += host + " avg walltime per job(msec):"+avg_walltime+"\n";// jobs:"+total_jobs_host+"\n";
+        out += count_detail+"\n";
+        if(stat.exceptions.length > 0) {
+            out += "Exception thrown on this site: "+stat.exceptions.length+"\n";
+            stat.exceptions.forEach(function(exception) {
+                out += exception+"\n";
+            });
+        }
+        if(stat.holds.length > 0) {
+            out += "Job held on this site: "+stat.holds.length+"\n";
+            stat.holds.forEach(function(hold) {
+                out += hold +"\n";
+            });
+        }
+        //total_walltime += stat.total_walltime;
+
+        //out += JSON.stringify(stat, null, 2);
+        out += "\n";
+    }
+
+    var duration = new Date() - this.starttime;
+
+    //var avg_walltime = total_walltime/total_jobs;
+    out += "---------------------------------------------------------------------------\n";
+    //out += "Total Walltime(msec) of jobs:"+total_walltime+"\n";
+    out += "Total Walltime(msec) of workflow:"+duration+"\n";
+    out += "Total Jobs:"+total_jobs+"\n";
+    //out += "Avg Walltime per job:"+avg_walltime+"\n";
+    out += "---------------------------------------------------------------------------\n";
+    return out;
+}
+
+//
+//
+//
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 Workflow.prototype.cleanup = function(job) {
-    //console.log("cleaning "+job.id);
     if(job.timeout) {
         clearTimeout(job.timeout);
         delete job.timeout;
     }
-    //console.log("unwatching:"+job.id);
     job.log.unwatch();
     delete this.submitted[job.id];
 }
@@ -356,6 +446,12 @@ Workflow.prototype.submit = function(options) {
                         MemoryUsage: event.MemoryUsage,
                         ResidentSetSize: event.ResidentSetSize
                     };
+
+                    //update max
+                    if(job.max_image_size < event.Size) job.max_image_size = event.Size;
+                    if(job.max_memory_usage < event.MemoryUsage) job.max_memory_usage = event.MemoryUsage;
+                    if(job.max_resident_set_size < event.ResidentSetSize) job.max_resident_set_size = event.ResidentSetSize;
+
                     job.emit('imagesize', info);
                     job.emit('progress', info); //deprecated (use imagesize instead)
                     break; 
@@ -519,11 +615,25 @@ Workflow.prototype.submit = function(options) {
 
 //abort any jobs that are still submitted
 Workflow.prototype.removeall = function() {
+    var jobs = [];
     for(var id in this.submitted) {
         var job = this.submitted[id];
-        job.remove();
+        jobs.push(job);
     }
-    this.submitted = [];
+    //remove 10 jobs max at a time (so that I won't exceed ulimit -u)
+    async.eachLimit(jobs, 10, function(job, next) {
+        job.remove(next);
+    }, function(err) {
+        //all done..
+        //this.submitted = []; //remove should take care of removing job
+
+        /*
+        //assert..
+        if(Object.keys(this.submitted).length != 0) {
+            console.log("workflow.submitted still contains some jobs.. this shoudn't have happened.");
+        }
+        */
+    });
 } 
     
 //remove all jobs on all workflows

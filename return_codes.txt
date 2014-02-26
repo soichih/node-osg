@@ -8,12 +8,13 @@
     2 - resource(memory?) error (job will fail everywhere)
     9 - unknown error from the executable
 
-    //10 - 19 usually indicates temporarly error (should retry)
+    //10 - 19 usually indicates site error (should retry)
     10 - failed to load input (should retry)
     11 - produced invalid output (should retry)
     12 - executable missing or failed to run (should retry)
     13 - program crashed due to some kind of bug (ncbi c++ exception)
     14 - blast segfaulted
+    15 - squid server not working (should report to GOC)
 
 64 - failed to download node/npm
 65 - failed to install osg node package

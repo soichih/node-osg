@@ -77,6 +77,7 @@ Workflow.prototype.get_runtime_stats = function(resource_name) {
         this.runtime_stats.hosts[resource_name] = {
             total_walltime: 0,
             exceptions: [],
+            errors: [],
             holds: [],
             counts: {}, //number of time it ran on this host
         }
@@ -96,6 +97,10 @@ Workflow.prototype.store_exception = function(job, message) {
     var stat = this.get_runtime_stats(job.resource_name);
     stat.exceptions.push(message);
 }
+Workflow.prototype.store_reconnectfail = function(job, info) {
+    var stat = this.get_runtime_stats(job.resource_name);
+    stat.errors.push(info);
+}
 Workflow.prototype.store_hold = function(job, info) {
     var stat = this.get_runtime_stats(job.resource_name);
     stat.holds.push(info);
@@ -103,22 +108,11 @@ Workflow.prototype.store_hold = function(job, info) {
 Workflow.prototype.print_runtime_stats = function(job, info) {
     var out = "";
     var total_jobs = 0;
-    //var total_walltime = 0;
     out += "---------------------------------------------------------------------------\n";
     out += "Workflow Statistics \n";
     out += "---------------------------------------------------------------------------\n";
     for(var host in this.runtime_stats.hosts) {
         var stat = this.runtime_stats.hosts[host];
-        /*
-        "SMU_HPC": {
-          "total_walltime": 12328250,
-          "exceptions": [],
-          "holds": [],
-          "counts": {
-            "0": 93
-          }
-        },
-        */
 
         //count jobs
         var count_detail = "";
@@ -158,12 +152,15 @@ Workflow.prototype.print_runtime_stats = function(job, info) {
         if(stat.holds.length > 0) {
             out += "Job held on this site: "+stat.holds.length+"\n";
             stat.holds.forEach(function(hold) {
-                out += hold +"\n";
+                out += JSON.stringify(hold, null, 2)+"\n";
             });
         }
-        //total_walltime += stat.total_walltime;
-
-        //out += JSON.stringify(stat, null, 2);
+        if(stat.errors.length > 0) {
+            out += "errors on this site: "+stat.errors.length+"\n";
+            stat.errors.forEach(function(error) {
+                out += JSON.stringify(error, null, 2)+"\n";
+            });
+        }
         out += "\n";
     }
 
@@ -178,8 +175,6 @@ Workflow.prototype.print_runtime_stats = function(job, info) {
     out += "---------------------------------------------------------------------------\n";
     return out;
 }
-
-//
 //
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -274,15 +269,6 @@ Workflow.prototype.submit = function(options) {
                 //user specified
                 next();
             } else {
-                /*
-                //creat temp one
-                temp.open({dir: options.rundir, prefix:"osg-stdout."}, function(err, tmp) { 
-                    if(err) throw err;
-                    console.log("using stdout path:"+tmp.path);
-                    options.stdout = tmp.path; 
-                    next();
-                });
-                */
                 options.stdout = options.rundir+"/stdout.out";
                 next();
             }
@@ -293,13 +279,6 @@ Workflow.prototype.submit = function(options) {
             if(options.stderr) {
                 next();
             } else {
-                /*
-                temp.open('osg-stderr.', function(err, tmp) { 
-                    if(err) throw err;
-                    options.stderr = tmp.path; 
-                    next();
-                });
-                */
                 options.stderr = options.rundir+"/stderr.out";
                 next();
             }
@@ -457,7 +436,7 @@ Workflow.prototype.submit = function(options) {
                     break; 
                 case "ShadowExceptionEvent":
                     if(job.timeout) {
-                        console.log("stopping timer due to exception thrown");
+                        console.log(job.id+" stopping timer due to exception on "+job.resource_name);
                         clearTimeout(job.timeout);
                         delete job.timeout;
                     }
@@ -499,15 +478,57 @@ Workflow.prototype.submit = function(options) {
                     break;
 
                 case "JobDisconnectedEvent":
+                    /*
+                    <c>
+                        <a n="EventDescription"><s>Job disconnected, attempting to reconnect</s></a>
+                        <a n="StartdName"><s>glidein_39744@ri19n08.sandhills.hcc.unl.edu</s></a>
+                        <a n="MyType"><s>JobDisconnectedEvent</s></a>
+                        <a n="StartdAddr"><s>&lt;10.147.14.8:47407?CCBID=129.79.53.179:9808#71610&amp;noUDP&gt;</s></a>
+                        <a n="Proc"><i>0</i></a>
+                        <a n="Cluster"><i>55226309</i></a>
+                        <a n="EventTime"><s>2014-02-27T19:09:53</s></a>
+                        <a n="Subproc"><i>0</i></a>
+                        <a n="EventTypeNumber"><i>22</i></a>
+                        <a n="CurrentTime"><e>time()</e></a>
+                        <a n="DisconnectReason"><s>Socket between submit and execute hosts closed unexpectedly</s></a>
+                    </c>
+
+                    */
                     job.emit('disconnect', {
-                        _event: event
+                        EventDescription: event.EventDescription,
+                        StartdName: event.StartdName,
+                        StartdAddr: event.StartdAddr,
+                        DisconnectReason: event.DisconnectReason
                     });
                     break;
 
                 case "JobReconnectFailedEvent":
-                    job.emit('reconnectfail', {
-                        _event: event
-                    });
+                    /*
+                    <c>
+                        <a n="EventDescription"><s>Job reconnect impossible: rescheduling job</s></a>
+                        <a n="Reason"><s>Job disconnected too long: JobLeaseDuration (1200 seconds) expired</s></a>
+                        <a n="StartdName"><s>glidein_39744@ri19n08.sandhills.hcc.unl.edu</s></a>
+                        <a n="MyType"><s>JobReconnectFailedEvent</s></a>
+                        <a n="Proc"><i>0</i></a>
+                        <a n="Cluster"><i>55226309</i></a>
+                        <a n="EventTime"><s>2014-02-27T19:29:53</s></a>
+                        <a n="Subproc"><i>0</i></a>
+                        <a n="EventTypeNumber"><i>24</i></a>
+                        <a n="CurrentTime"><e>time()</e></a>
+                    </c>
+                    */
+                    if(job.timeout) {
+                        console.log(job.id+" stopping timer due to reconnection failure on "+job.resource_name);
+                        clearTimeout(job.timeout);
+                        delete job.timeout;
+                    }
+                    var info = {
+                        EventDescription: event.EventDescription,
+                        Reason: event.Reason,
+                        StartdName: event.StartdName
+                    };
+                    job.emit('reconnectfail', info);
+                    workflow.store_reconnectfail(job, info);
                     break;
                 case "JobEvictedEvent": 
                     //called if someone call condor_hold 

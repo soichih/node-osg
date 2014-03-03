@@ -15,6 +15,7 @@
     13 - program crashed due to some kind of bug (ncbi c++ exception)
     14 - blast segfaulted
     15 - squid server not working (should report to GOC)
+    16 - failed to download db
 
 64 - failed to download node/npm
 65 - failed to install osg node package

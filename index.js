@@ -62,7 +62,9 @@ var Workflow = function() {
         hosts: {} //list of hosts where jobs are submitted (and counts for each return codes)
     };
     this.starttime = new Date();
+    this.id = this.starttime.getTime(); //use starttime as id
 
+    console.log("created workflow id:"+this.id+" :: monitor with condor_q -constraint node_osg_workflow_id==\\\""+this.id+"\\\"");
     workflows.push(this); //register this workflow to module workflow list
 }
 exports.Workflow = Workflow;
@@ -308,6 +310,7 @@ Workflow.prototype.submit = function(options) {
 
             output: options.stdout,
             error: options.stderr,
+            "+node_osg_workflow_id": workflow.id,
 
             queue: 1
         };
@@ -551,7 +554,8 @@ Workflow.prototype.submit = function(options) {
                     */
 
                     if(job.timeout) {
-                        console.log("hold call back should handle timeout, so not sure if this is necessary, but... just in case");
+                        //still not sure if I need to stop timer for this.. but I feel like I should
+                        //console.log("hold call back should handle timeout, so not sure if this is necessary, but... just in case");
                         clearTimeout(job.timeout);
                         delete job.timeout;
                     }
@@ -634,6 +638,7 @@ Workflow.prototype.submit = function(options) {
     return job;
 }
 
+/*
 //abort any jobs that are still submitted
 Workflow.prototype.removeall = function() {
     var jobs = [];
@@ -648,26 +653,36 @@ Workflow.prototype.removeall = function() {
         //all done..
         //this.submitted = []; //remove should take care of removing job
 
-        /*
         //assert..
-        if(Object.keys(this.submitted).length != 0) {
-            console.log("workflow.submitted still contains some jobs.. this shoudn't have happened.");
-        }
-        */
+        //if(Object.keys(this.submitted).length != 0) {
+        //    console.log("workflow.submitted still contains some jobs.. this shoudn't have happened.");
+        //}
     });
 } 
+*/
+
+Workflow.prototype.remove = function() {
+    console.log("aborting all jobs in this workflow with id:"+this.id);
+    htcondor.remove(['-constraint', 'node_osg_workflow_id=="'+this.id+'"']);
+
+    //need to cleanup all jobs
+    for(var id in this.submitted) {
+        var job = this.submitted[id];
+        this.cleanup(job);
+    }
+}
     
 //remove all jobs on all workflows
 process.on('SIGINT', function() {
     console.log("node-osg received SIGINT(ctrl+c)");
     workflows.forEach(function(workflow) {
-        workflow.removeall();
+        workflow.remove();
     });
 });
 process.on('SIGTERM', function() {
     console.log("node-osg received SIGTERM(kill)");
     workflows.forEach(function(workflow) {
-        workflow.removeall();
+        workflow.remove();
     });
 });
 

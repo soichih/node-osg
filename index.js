@@ -64,6 +64,8 @@ var Workflow = function() {
     this.starttime = new Date();
     this.id = this.starttime.getTime(); //use starttime as id
 
+    this.removed = false; 
+
     console.log("created workflow id:"+this.id+" :: monitor with condor_q -constraint node_osg_workflow_id==\\\""+this.id+"\\\"");
     workflows.push(this); //register this workflow to module workflow list
 }
@@ -182,10 +184,12 @@ Workflow.prototype.print_runtime_stats = function(job, info) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 Workflow.prototype.cleanup = function(job) {
+    /*
     if(job.timeout) {
         clearTimeout(job.timeout);
         delete job.timeout;
     }
+    */
     job.log.unwatch();
     delete this.submitted[job.id];
 }
@@ -337,6 +341,15 @@ Workflow.prototype.submit = function(options) {
         if(options.debug) {
             submit_options.debug = options.debug;
         }
+        if(options.timeout) {//in msec
+            if(submit_options.periodic_hold) {
+                console.error("submit option periodic_hold and timeout collide - not setting timeout)");
+            } else {
+                submit_options.periodic_hold = "(JobStatus == 1 || JobStatus == 2) && (CurrentTime - EnteredCurrentStatus) > "+parseInt(options.timeout/1000);
+                submit_options.periodic_hold_reason = "timeout set by user";
+                submit_options.periodic_hold_subcode = 1;
+            }
+        }
 
         //add some condor override
         submit_options = extend(submit_options, options.condor);
@@ -357,6 +370,10 @@ Workflow.prototype.submit = function(options) {
 
             //console.log("htcondor submitted..calling onevent");
             job.log.onevent(function(event) {
+                if(workflow.removed) {
+                    //ignore all further event - once we removed our workflow
+                    return;
+                }
 
                 if(options.debug) {
                     //debug
@@ -390,6 +407,7 @@ Workflow.prototype.submit = function(options) {
                     */
                     job.starttime = new Date();
 
+                    /*
                     if(options.timeout) {
                         if(job.timeout) {
                             console.log("this shouldn't happen, but timeout is already running on ExecutEvent.. clearing");
@@ -400,6 +418,7 @@ Workflow.prototype.submit = function(options) {
                             delete job.timeout; //necessary?
                         }, options.timeout);
                     }
+                    */
 
                     job.q(function(err, info) {
                         //TODO - can we make this submit host generic?
@@ -438,11 +457,13 @@ Workflow.prototype.submit = function(options) {
                     job.emit('progress', info); //deprecated (use imagesize instead)
                     break; 
                 case "ShadowExceptionEvent":
+                    /*
                     if(job.timeout) {
                         console.log(job.id+" stopping timer due to exception on "+job.resource_name);
                         clearTimeout(job.timeout);
                         delete job.timeout;
                     }
+                    */
 
                     if(job.resource_name) {
                         job.emit('exception', {
@@ -520,11 +541,13 @@ Workflow.prototype.submit = function(options) {
                         <a n="CurrentTime"><e>time()</e></a>
                     </c>
                     */
+                    /*
                     if(job.timeout) {
                         console.log(job.id+" stopping timer due to reconnection failure on "+job.resource_name);
                         clearTimeout(job.timeout);
                         delete job.timeout;
                     }
+                    */
                     var info = {
                         EventDescription: event.EventDescription,
                         Reason: event.Reason,
@@ -553,12 +576,14 @@ Workflow.prototype.submit = function(options) {
                          ReceivedBytes: 702 }
                     */
 
+                    /*
                     if(job.timeout) {
                         //still not sure if I need to stop timer for this.. but I feel like I should
                         //console.log("hold call back should handle timeout, so not sure if this is necessary, but... just in case");
                         clearTimeout(job.timeout);
                         delete job.timeout;
                     }
+                    */
 
                     job.emit('evict', {
                         SentBytes: event.SentBytes,
@@ -585,10 +610,12 @@ Workflow.prototype.submit = function(options) {
                         <a n="CurrentTime"><e>time()</e></a>
                     </c>
                     */
+                    /*
                     if(job.timeout) {
                         clearTimeout(job.timeout);
                         delete job.timeout;
                     }
+                    */
                     var info = {
                         HoldReasonCode: event.HoldReasonCode,
                         HoldReasonSubCode: event.HoldReasonSubCode,
@@ -662,7 +689,13 @@ Workflow.prototype.removeall = function() {
 */
 
 Workflow.prototype.remove = function() {
-    console.log("aborting all jobs in this workflow with id:"+this.id);
+    if(this.removed) {
+        //workflow already removed - no reason to do this again
+        return;
+    }
+    this.removed = true;
+
+    //console.log("aborting all jobs in this workflow with id:"+this.id);
     htcondor.remove(['-constraint', 'node_osg_workflow_id=="'+this.id+'"']);
 
     //need to cleanup all jobs

@@ -1,3 +1,6 @@
+
+RETURN CODE ---------------------------------------------------------------
+
 0 - job completed successfully
 
 1 - 63 (job specific return codes)
@@ -26,3 +29,7 @@
 130 - sigint (ctrl+c - ed)
 137 - sigkill (kill -9 <pid>)-ed)
 147 - sigterm (normal kill <pid>)
+
+HOLD SUBCODE ---------------------------------------------------------------
+
+1 - timeout

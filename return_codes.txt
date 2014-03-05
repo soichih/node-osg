@@ -7,8 +7,9 @@ RETURN CODE ---------------------------------------------------------------
     (common job specific return codes)
 
     //1 - 9 usuallly indicates permanent error (should abort the workflow)
-    1 - input error (job will fail everywhere)
+    1 - issue with input file (or blast db) (job will fail everywhere)
     2 - resource(memory?) error (job will fail everywhere)
+    3 - parameter is wrong (or dbname is wrong)
     9 - unknown error from the executable
 
     //10 - 19 usually indicates site error (should retry)

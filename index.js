@@ -422,8 +422,13 @@ Workflow.prototype.submit = function(options) {
 
                     job.q(function(err, info) {
                         //TODO - can we make this submit host generic?
-                        job.resource_name = info.MATCH_EXP_JOBGLIDEIN_ResourceName;
-                        job.machine_name = info.MachineAttrName0;
+                        if(!info.MATCH_EXP_JOBGLIDEIN_ResourceName) {
+                            console.log("condor_q didn't return job info for ResourceName");    
+                            console.dir(info);
+                        } else {
+                            job.resource_name = info.MATCH_EXP_JOBGLIDEIN_ResourceName;
+                            job.machine_name = info.MachineAttrName0;
+                        }
 
                         job.emit('execute', info);
                     });

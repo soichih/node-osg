@@ -47,7 +47,11 @@ var Job = function(workflow) {
     this.q = function(callback) {
         return htcondor.q(this.id, callback);
     }
-
+    /*
+    this.history = function(callback) {
+        return htcondor.history(this.id, callback);
+    }
+    */
     //not sure what I do with these yet,
     this.max_image_size = 0;
     this.max_memory_usage = 0;
@@ -364,6 +368,7 @@ Workflow.prototype.submit = function(options) {
             //set info..
             job.id = condorjob.id;
             job.log = condorjob.log;
+            job.resource_name = "unknown_resource";  //some jobs finish too quickly for condor_q to have time to pull info after execute event
             workflow.submitted[condorjob.id] = job;
 
             job.emit('submit', condorjob);
@@ -420,18 +425,31 @@ Workflow.prototype.submit = function(options) {
                     }
                     */
 
+                    job.emit('execute', info);
+
+                    //query where the job is executing
+                    //TODO - can we make this submit host generic?
                     job.q(function(err, info) {
-                        //TODO - can we make this submit host generic?
-                        if(!info.MATCH_EXP_JOBGLIDEIN_ResourceName) {
-                            console.log("condor_q didn't return job info for ResourceName");    
-                            console.dir(info);
+                        if(err) {
+                            console.log(job.id+" condor_q didn't return info");
+                            /*
+                            job.history(function(err, info) {
+                                if(err) {
+                                    console.log(job.id+" failed to determine where the job is running");
+                                } else {
+                                    job.resource_name = info.MATCH_EXP_JOBGLIDEIN_ResourceName;
+                                    job.machine_name = info.MachineAttrName0;
+                                    job.emit('q', info);
+                                }
+                            });
+                            */
                         } else {
                             job.resource_name = info.MATCH_EXP_JOBGLIDEIN_ResourceName;
                             job.machine_name = info.MachineAttrName0;
+                            job.emit('q', info);
                         }
-
-                        job.emit('execute', info);
                     });
+
                     break;
                 //transitional
                 case "JobImageSizeEvent":
@@ -461,6 +479,7 @@ Workflow.prototype.submit = function(options) {
                     job.emit('imagesize', info);
                     job.emit('progress', info); //deprecated (use imagesize instead)
                     break; 
+
                 case "ShadowExceptionEvent":
                     /*
                     if(job.timeout) {
@@ -470,26 +489,11 @@ Workflow.prototype.submit = function(options) {
                     }
                     */
 
-                    if(job.resource_name) {
-                        job.emit('exception', {
-                            Message: event.Message
-                        });
-                        workflow.store_exception(job, event.Message);
-                    } else {
-                        //sometime exeption happens before execute event.. pull resource name so that I can
-                        //report where the error message happens
-                        job.q(function(err, info) {
-                            job.resource_name = info.MATCH_EXP_JOBGLIDEIN_ResourceName;
-                            job.machine_name = info.MachineAttrName0;
-                            job.emit('exception', {
-                                Message: event.Message
-                            });
-                            workflow.store_exception(job, event.Message);
-                        });
-                    }
-
+                    job.emit('exception', {
+                        Message: event.Message
+                    });
+                    workflow.store_exception(job, event.Message);
                     break;
-
                 case "JobReleaseEvent":
                     /*
                     { Reason: 'via condor_release (by user hayashis)',

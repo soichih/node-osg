@@ -148,7 +148,7 @@ Workflow.prototype.print_runtime_stats = function(job, info) {
         total_jobs += total_jobs_host;
 
         //start output
-        var avg_walltime = stat.total_walltime / total_jobs_host;
+        var avg_walltime = parseInt(stat.total_walltime / total_jobs_host);
         out += host + " avg walltime per job(msec):"+avg_walltime+"\n";// jobs:"+total_jobs_host+"\n";
         out += count_detail+"\n";
         if(stat.exceptions.length > 0) {
@@ -431,7 +431,7 @@ Workflow.prototype.submit = function(options) {
                     //TODO - can we make this submit host generic?
                     job.q(function(err, info) {
                         if(err) {
-                            console.log(job.id+" condor_q didn't return info");
+                            console.log(job.id+" condor_q didn't return info:"+err);
                             /*
                             job.history(function(err, info) {
                                 if(err) {

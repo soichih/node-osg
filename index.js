@@ -206,7 +206,8 @@ Workflow.prototype.submit = function(options) {
     options = extend({
         something: 'hoge',
         send: [],
-        receive: []
+        receive: [],
+        tmpdir: '/tmp'
     }, options); 
 
     //initialize
@@ -215,7 +216,7 @@ Workflow.prototype.submit = function(options) {
         function(next) {
             if(!options.rundir) {
                 //just create an empty rundir
-                temp.mkdir('node-osg.rundir', function(err, rundir) { 
+                temp.mkdir({dir: options.tmpdir, prefix:'node-osg.rundir'}, function(err, rundir) { 
                     if(err) throw err;
                     options.rundir = rundir;
                     next();
@@ -223,7 +224,7 @@ Workflow.prototype.submit = function(options) {
             } else {
                 //rundir specified by user.. but is it a function?
                 if (typeof(options.rundir) == 'function') {
-                    temp.mkdir('node-osg.rundir', function(err, rundir) { 
+                    temp.mkdir({dir: options.tmpdir, prefix:'node-osg.rundir'}, function(err, rundir) { 
                         if(err) throw err;
                         //let user populate rundir
                         options.rundir(rundir, function() {
@@ -322,7 +323,7 @@ Workflow.prototype.submit = function(options) {
 
             queue: 1
         };
-
+        //console.dir(submit_options);
 
         if(options.receive.length > 0) {
             submit_options.transfer_output_files = options.receive;
@@ -362,8 +363,8 @@ Workflow.prototype.submit = function(options) {
         job.stdout = options.stdout;
         job.stderr = options.stderr;
 
-        //finally, submit to condor
-        htcondor.submit(submit_options).then(function(condorjob) {
+        //finally, submit to condor (use rundir as htcondor tmpdir)
+        htcondor.submit(submit_options, {tmpdir: options.rundir}).then(function(condorjob) {
 
             //set info..
             job.id = condorjob.id;

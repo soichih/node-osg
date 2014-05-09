@@ -2,11 +2,14 @@ var events = require('events');
 var extend = require('util')._extend;
 var fs = require('fs');
 var path = require('path');
+var http = require('http');
 
 var htcondor = require('htcondor');
 var temp = require('temp');
 var async = require('async');
 var which = require('which');
+var xml2js = require('xml2js');
+var Q = require('q');
 
 //remove submit file created
 temp.track();
@@ -712,6 +715,52 @@ Workflow.prototype.remove = function() {
     for(var id in this.submitted) {
         var job = this.submitted[id];
         this.cleanup(job);
+    }
+}
+
+//Interface with MyOSG and pull various data
+exports.MyOSG = {
+    rgsummary: function(options) {
+        var deferred = Q.defer();
+
+        var service_query = "";
+        if(options && options.services) {
+            service_query = "service=on&";
+            options.services.forEach(function(service) {
+                if(service == "CE") service_query += "service_1=on&";
+                if(service == "GridFTP") service_query += "service_5=on&";
+                if(service == "SRMv1") service_query += "service_2=on&";
+                if(service == "SRMv2") service_query += "service_3=on&";
+            });
+        }
+        var url = "http://myosg.grid.iu.edu/rgsummary/xml?summary_attrs_showdesc=on&summary_attrs_showgipstatus=on&summary_attrs_showhierarchy=on&summary_attrs_showwlcg=on&summary_attrs_showservice=on&summary_attrs_showrsvstatus=on&summary_attrs_showfqdn=on&summary_attrs_showvomembership=on&summary_attrs_showvoownership=on&summary_attrs_showcontact=on&summary_attrs_showticket=on&gip_status_attrs_showtestresults=on&downtime_attrs_showpast=&account_type=cumulative_hours&ce_account_type=gip_vo&se_account_type=vo_transfer_volume&bdiitree_type=total_jobs&bdii_object=service&bdii_server=is-osg&start_type=7daysago&start_date=04%2F30%2F2014&end_type=now&end_date=04%2F30%2F2014&all_resources=on&facility_10009=on&gridtype_1=on&"+service_query+"active=on&active_value=1&disable_value=1";
+
+        var req = http.get(url, function(res) {
+            var xml = '';
+            res.on('data', function(chunk) {
+                xml += chunk;
+            });
+
+            res.on('end', function() {
+                var parser = new xml2js.Parser();//{explicitArray: false});
+                parser.parseString(xml, function (err, result) {
+                    if(result.ResourceSummary && result.ResourceSummary.ResourceGroup) {
+                        console.log(url);
+                        deferred.resolve(result.ResourceSummary.ResourceGroup);
+                    } else {
+                        deferred.reject("Malformed XML - dumping");
+                        console.error("dumping malformed myosg xml");
+                        console.error(xml);
+                    }
+                });
+            });
+        });
+
+        req.on('error', function(err) {
+            deferred.reject(err);
+        });
+
+        return deferred.promise;
     }
 }
     

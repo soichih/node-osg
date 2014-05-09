@@ -117,3 +117,4 @@ var job = workflow.submit({
 });
 ```
 
+If you have any questions / suggestions, please contact me at hayashis@iu.edu

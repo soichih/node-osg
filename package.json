@@ -24,6 +24,8 @@
         "htcondor": "*",
         "temp": "*",
         "async": "*",
+        "q": "*",
+        "xml2js": "*",
         "which": "*"
     }
 }

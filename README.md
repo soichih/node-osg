@@ -5,6 +5,13 @@ Open Science Grid client in nodejs. It's mainly a wrapper around htcondor and ma
 
 As this is a node client, node executable will be automatically shipped to the remote cluster, but you can run non-javascript code at the worker node. You can use node-osg as a submission / dynamic workflow management tool. 
 
+## Install
+
+```
+npm install node-osg
+```
+
+
 ## Submit job and monitor events
 
 ```
@@ -21,7 +28,7 @@ var job = workflow.submit({
     //timer will start when job starts executing and stopped if it's held, or terminated
     timeout: 15*1000, //(timer will stop if job terminates, hold, etc)
 
-    //set call back function to stage any input files (or symlink to the actual file)
+    //set callback function to stage any input files (or symlink to the actual file)
     //that you wish to send to the remote hosts
     rundir: function(rundir, next) {
         console.log("using rundir:"+rundir);

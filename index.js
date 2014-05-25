@@ -48,7 +48,7 @@ var Job = function(workflow) {
         return htcondor.release(this.id, callback);
     }
     this.q = function(callback) {
-        return htcondor.q(this.id, callback);
+        return htcondor.q({id:this.id}, callback);
     }
     /*
     this.history = function(callback) {

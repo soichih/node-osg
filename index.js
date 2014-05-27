@@ -358,6 +358,18 @@ Workflow.prototype.submit = function(options) {
                 submit_options.periodic_hold_subcode = 1;
             }
         }
+        if(options.env) {
+            submit_options.environment = "";
+            for(var key in options.env) {
+                var value = options.env[key];
+                var token = key+"="+value;
+                if(token.indexOf("\"") !== -1) {
+                    throw("double-quote mark handling is not yet supported. please avoid using double-quote: "+key+":"+value);
+                
+                }
+                submit_options.environment += "\""+token+"\" ";
+            }
+        }
 
         //add some condor override
         submit_options = extend(submit_options, options.condor);

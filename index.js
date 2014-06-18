@@ -34,7 +34,9 @@ var Job = function(workflow) {
         eventEmitter.on(event, callback);
     }
     this.emit = function(event, data) {
-        eventEmitter.emit(event, data);
+        if(!this.workflow.removed) {
+            eventEmitter.emit(event, data);
+        }
     }
     this.remove = function(callback) {
         console.log("removing job:"+this.id);
@@ -204,6 +206,11 @@ Workflow.prototype.cleanup = function(job) {
 Workflow.prototype.submit = function(options) {
     var workflow = this;
     var job = new Job(this);
+
+    if(workflow.removed) {
+        console.log("can't submit on workflow that's already removed.. returning empty job");
+        return job;
+    }
 
     //some default
     options = extend({
@@ -385,17 +392,11 @@ Workflow.prototype.submit = function(options) {
             job.id = condorjob.id;
             job.log = condorjob.log;
             job.resource_name = "unknown_resource";  //some jobs finish too quickly for condor_q to have time to pull info after execute event
+            job.starttime = new Date(); //in case execute event never gets fired
             workflow.submitted[condorjob.id] = job;
 
             job.emit('submit', condorjob);
-
-            //console.log("htcondor submitted..calling onevent");
             job.log.onevent(function(event) {
-                if(workflow.removed) {
-                    //ignore all further event - once we removed our workflow
-                    return;
-                }
-
                 if(options.debug) {
                     //debug
                     console.dir(event);
@@ -426,7 +427,7 @@ Workflow.prototype.submit = function(options) {
                       EventTypeNumber: 1,
                       CurrentTime: 'expression:time()' }
                     */
-                    job.starttime = new Date();
+                    job.starttime = new Date(); //let's reset this to be more accurate
 
                     /*
                     if(options.timeout) {
@@ -678,6 +679,27 @@ Workflow.prototype.submit = function(options) {
                     job.emit('terminate', info);
                     workflow.cleanup(job);
                     break;
+
+                /* //events that I don't have any experience with 
+                //http://condor.sourcearchive.com/documentation/7.2.4/classULogEvent_733767b7605987393b2a74c1412e763e.html
+
+                case "RemoteErrorEvent":
+                case "JobReconnectedEvent":
+                case "GridResourceUpEvent":
+                case "GridResourceDownEvent":
+                case "GridResourceDownEvent":
+                case "GlobusResourceDownEvent":
+                case "GlobusResourceUpEvent":
+                case "GlobusSubmitFailedEvent":
+                case "NodeExecuteEvent":
+                case "NodeTerminatedEvent":
+                case "PostScriptTerminatedEvent":
+                case "JobUnsuspendedEvent":
+                case "JobSuspendedEvent":
+                case "GenericEvent":
+                case "CheckpointedEvent":
+                case "ExecutableErrorEvent":
+                */
                 default:
                     console.log("unknown event type:"+event.MyType);
                 }
@@ -776,17 +798,22 @@ exports.MyOSG = {
     }
 }
     
+/*
 //remove all jobs on all workflows
 process.on('SIGINT', function() {
     console.log("node-osg received SIGINT(ctrl+c)");
     workflows.forEach(function(workflow) {
         workflow.remove();
     });
+    //console.dir(process._getActiveHandles());
+    //console.dir(process._getActiveRequests());
 });
 process.on('SIGTERM', function() {
     console.log("node-osg received SIGTERM(kill)");
     workflows.forEach(function(workflow) {
         workflow.remove();
     });
+    //console.dir(process._getActiveHandles());
+    //console.dir(process._getActiveRequests());
 });
-
+*/

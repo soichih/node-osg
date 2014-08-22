@@ -143,7 +143,7 @@ Workflow.prototype.print_runtime_stats = function(job, info) {
             case 11: code = "invalid output";break;
             //TODO add others..
             default:
-                code = "code:"+ret;
+                code = "code_"+ret;
 
             }
             count_detail+= code+":"+count+" ";
@@ -154,7 +154,7 @@ Workflow.prototype.print_runtime_stats = function(job, info) {
 
         //start output
         var avg_walltime = parseInt(stat.total_walltime / total_jobs_host);
-        out += host + " avg walltime per job(msec):"+avg_walltime+"\n";// jobs:"+total_jobs_host+"\n";
+        out += host + " avg walltime per job(ms):"+avg_walltime+"\n";// jobs:"+total_jobs_host+"\n";
         out += count_detail+"\n";
         if(stat.exceptions.length > 0) {
             out += "Exception thrown on this site: "+stat.exceptions.length+"\n";
@@ -181,8 +181,7 @@ Workflow.prototype.print_runtime_stats = function(job, info) {
 
     //var avg_walltime = total_walltime/total_jobs;
     out += "---------------------------------------------------------------------------\n";
-    //out += "Total Walltime(msec) of jobs:"+total_walltime+"\n";
-    out += "Total Walltime(msec) of workflow:"+duration+"\n";
+    out += "Total Walltime(ms) of workflow:"+duration+"\n";
     out += "Total Jobs:"+total_jobs+"\n";
     //out += "Avg Walltime per job:"+avg_walltime+"\n";
     out += "---------------------------------------------------------------------------\n";
@@ -356,7 +355,7 @@ Workflow.prototype.submit = function(options) {
         if(options.debug) {
             submit_options.debug = options.debug;
         }
-        if(options.timeout) {//in msec
+        if(options.timeout) {//in ms
             if(submit_options.periodic_hold) {
                 console.error("submit option periodic_hold and timeout collide - not setting timeout)");
             } else {
@@ -651,7 +650,7 @@ Workflow.prototype.submit = function(options) {
                     job.emit('hold', info);
                     break;
 
-                //terminal status (need to stop timer and cleanup the job)
+                //terminal status (need to stop timer and cleanup the job - not the workflow!)
                 case "JobAbortedEvent":
                     /*
                     { Reason: 'via condor_rm (by user hayashis)',
@@ -663,14 +662,35 @@ Workflow.prototype.submit = function(options) {
                       EventTypeNumber: 9,
                       CurrentTime: 'expression:time()' }
                     */
-                    job.emit('abort', {
+                    var info = {
                         Reason: event.Reason
-                    });
+                    };
+                    workflow.store_runtime(job, info);
+                    job.emit('abort', info);
                     workflow.cleanup(job);
                     break;
-                case "JobTerminatedEvent":
-                    job.endtime = new Date();
 
+                case "JobTerminatedEvent": //job finished
+                    /*
+                    { TotalLocalUsage: [ 'Usr 0 00:00:00, Sys 0 00:00:00' ],
+                      Proc: 0,
+                      EventTime: [ '2014-08-22T13:01:19' ],
+                      TotalRemoteUsage: [ 'Usr 0 00:00:09, Sys 0 00:00:01' ],
+                      TotalReceivedBytes: 26514548,
+                      ReturnValue: 0,
+                      RunRemoteUsage: [ 'Usr 0 00:00:09, Sys 0 00:00:01' ],
+                      RunLocalUsage: [ 'Usr 0 00:00:00, Sys 0 00:00:00' ],
+                      SentBytes: 49046,
+                      MyType: [ 'JobTerminatedEvent' ],
+                      Cluster: 66559024,
+                      TotalSentBytes: 49046,
+                      Subproc: 0,
+                      CurrentTime: 'expression:time()',
+                      EventTypeNumber: 5,
+                      ReceivedBytes: 26514548,
+                      TerminatedNormally: false }
+                    */
+                    job.endtime = new Date();
                     var info = {
                         ret: event.ReturnValue,
                         walltime: job.endtime - job.starttime

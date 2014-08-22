@@ -19,7 +19,7 @@ var job = workflow.submit({
 
     //timeout event will be fired after this timeout.
     //timer will start when job starts executing and stopped if it's held, or terminated
-    timeout: 15*1000, 
+    timeout: 30*1000, 
 
     //set call back function to stage any input files (or symlink to the actual file)
     //that you wish to send to the remote hosts
@@ -69,11 +69,14 @@ job.on('release', function(info) {
 job.on('hold', function(info) {
     console.log("job held");
     console.dir(info);
+
+    console.log("releasing..");
     job.release();
 });
 job.on('terminate', function(info) {
-    console.log("job terminateD");
+    console.log("job terminated");
     console.dir(info);
+    console.log(workflow.print_runtime_stats());
     if(info.ret == 0) {
         fs.readFile(job.stdout, 'utf8', function (err,data) {
             console.log(data);

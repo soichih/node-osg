@@ -11,7 +11,6 @@ As this is a node client, node executable will be automatically shipped to the r
 npm install node-osg
 ```
 
-
 ## Submit job and monitor events
 
 ```
@@ -24,9 +23,10 @@ var workflow = new osg.Workflow();
 var job = workflow.submit({
     executable: 'job.sh', //executable to send & run (usually a shell script)
 
-    //timeout event will be fired after this timeout.
-    //timer will start when job starts executing and stopped if it's held, or terminated
-    timeout: 15*1000, //(timer will stop if job terminates, hold, etc)
+    //timeout currently uses periodic_hold submit option. depending on your condor config, "periodic" could mean
+    //every seconds to every 300 seconds (check by running "condor_config_val PERIODIC_EXPR_INTERVAL")
+    //if you set this to any value below PERIODIC_EXPR_INTERVAL, your timeout might not get triggered
+    timeout: 60*1000*10, //hold job after 10 minutes
 
     //set callback function to stage any input files (or symlink to the actual file)
     //that you wish to send to the remote hosts
@@ -59,11 +59,6 @@ job.on('exception', function(info) {
     console.log("exception");
     console.dir(info);
 });
-job.on('timeout', function(info) {
-    console.log("job timedout - holding job");
-    console.dir(info);
-    job.hold();
-});
 job.on('evict', function(info) {
     console.log("job evicted");
     console.dir(info);
@@ -73,7 +68,7 @@ job.on('release', function(info) {
     console.dir(info);
 });
 job.on('hold', function(info) {
-    console.log("job held");
+    console.log("job held"); //or timeout
     console.dir(info);
     //job.release();
 });
@@ -105,6 +100,7 @@ job.on('terminate', function(info) {
 
 If you want to submit via grid universe.. or set any other condor options, pass condor object containing
 all attributes that you want to set in the submit file.
+
 ```
 var condor = {
     //setting universe
@@ -125,3 +121,6 @@ var job = workflow.submit({
 ```
 
 If you have any questions / suggestions, please contact me at hayashis@iu.edu
+
+
+

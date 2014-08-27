@@ -4,13 +4,28 @@ var workflow = new osg.Workflow();
 describe('workflow', function() {
     it('should submit a job', function(done) {
         var job = workflow.submit({
-            executable: '/bin/hostname'
+            executable: '/bin/hostname',
+            debug: true
         }); 
         job.on('submit', function(info) {
             done();
             job.remove();
         });
     });
+
+    /*
+    it('should transfer an input file', function(done) {
+        this.timeout(60*1000);//too short?
+        var job = workflow.submit({
+            executable: '/bin/cat',
+            arguments: 'issue',
+            send: '/etc/issue'
+        });
+        job.on('terminate', function(info) {
+            console.dir(info);
+        });
+    });
+    */
     /*
     it('should a job timeout', function(done) {
         this.timeout(10*1000); 

@@ -332,10 +332,14 @@ Workflow.prototype.submit = function(options) {
 
             queue: 1
         };
-        //console.dir(submit_options);
 
         if(options.receive.length > 0) {
             submit_options.transfer_output_files = options.receive;
+        } else {
+            //if there is no outfile specified, condor start transferring *everything* in the cwd..
+            //and believe or not.. there is no option in condor to suppress this behavior.
+            //the only way to prevent this by specifying some dummy file..
+            submit_options.transfer_output_files = ['/etc/issue'];
         }
 
         if(options.send.length > 0) {

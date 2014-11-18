@@ -363,8 +363,15 @@ Workflow.prototype.submit = function(options) {
             if(submit_options.periodic_hold) {
                 console.error("submit option periodic_hold and timeout collide - not setting timeout)");
             } else {
-                submit_options.periodic_hold = "(JobStatus == 1 || JobStatus == 2) && (CurrentTime - EnteredCurrentStatus) > "+parseInt(options.timeout/1000);
-                submit_options.periodic_hold_reason = "timeout set by user";
+                //submit_options.periodic_hold = "(JobStatus == 1 || JobStatus == 2) && (CurrentTime - EnteredCurrentStatus) > "+parseInt(options.timeout/1000);
+                //hold if job is idle for 2 hours (TODO - should I make this configurable?)
+                //or job is running for specified amount of time
+                submit_options.periodic_hold = "(JobStatus == 1 && (CurrentTime - EnteredCurrentStatus) > 7200) || "+
+                    "(JobStatus == 2 && (CurrentTime - EnteredCurrentStatus) > "+parseInt(options.timeout/1000)+")";
+                submit_options.periodic_hold_reason = options.timeout_reason;
+                if(submit_options.periodic_hold_reason === undefined) {
+                    submit_options.periodic_hold_reason = "timeout set by user";
+                }
                 submit_options.periodic_hold_subcode = 1;
             }
         }

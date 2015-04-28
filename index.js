@@ -14,6 +14,9 @@ var Q = require('q');
 //remove submit file created
 temp.track();
 
+//number of jobs submitted (and watching)
+//we need to make sure this doesn't surpass "sysctl -a | grep fs.inotify.max_user_watches"
+
 //list of all workflow created via this module (used to remove all jobs on all workflows)
 var workflows = [];
 
@@ -64,8 +67,19 @@ var Job = function(workflow) {
 }
 exports.Job = Job;
 
-var Workflow = function() {
+var Workflow = function(options) {
     this.submitted = {}; //jobs are submitted (that we need to abort in case of SIGTERM/SIGINT) by this workflow
+    this.submitted_count = 0;
+
+    //max_concurrent_submit throttles maximum number of job submitted to the queue 
+    //in order to avoid running out of inotify resource consumed by node-htcondor
+    //TODO - I might move this to node-htcondor in the future
+    this.max_concurrent_submit = 4096;
+    if(options && options.max_concurrent_submit) {
+        this.max_concurrent_submit = options.max_concurrent_submit;
+    }
+
+    this.submit_later = []; //queue of jobs to be submitterd at later time - if there are too many jobs already submitted
 
     this.runtime_stats = {
         hosts: {} //list of hosts where jobs are submitted (and counts for each return codes)
@@ -192,19 +206,34 @@ Workflow.prototype.print_runtime_stats = function(job, info) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 Workflow.prototype.cleanup = function(job) {
-    /*
-    if(job.timeout) {
-        clearTimeout(job.timeout);
-        delete job.timeout;
-    }
-    */
     job.log.unwatch();
     delete this.submitted[job.id];
+    this.submitted_count--;
+
+    if(this.submit_later.length > 0) {
+        var delayed = this.submit_later.shift();
+        console.log("submitting delayed job");
+        this.submit(delayed);
+    }
 }
 
 Workflow.prototype.submit = function(options) {
     var workflow = this;
-    var job = new Job(this);
+
+    //throttle if there are too many jobs already submitted
+    if(options._delayed_job) {
+        var job = options._delayed_job;
+    } else {
+        var job = new Job(this);
+        if(this.submitted_count >= this.max_concurrent_submit) {
+            if(options.debug) {
+                console.log("delaying submission of job -- description:"+options.description);
+            }
+            options._delayed_job = job;
+            this.submit_later.push(options);
+            return job;
+        }
+    }
 
     if(workflow.removed) {
         console.log("can't submit on workflow that's already removed.. returning empty job");
@@ -315,6 +344,7 @@ Workflow.prototype.submit = function(options) {
             });
         }
     ], function() {
+        //done initializing
         var submit_options = {
             universe: 'vanilla',
 
@@ -404,6 +434,7 @@ Workflow.prototype.submit = function(options) {
             job.resource_name = "unknown_resource";  //some jobs finish too quickly for condor_q to have time to pull info after execute event
             job.starttime = new Date(); //in case execute event never gets fired
             workflow.submitted[condorjob.id] = job;
+            workflow.submitted_count++;
 
             job.emit('submit', condorjob);
             job.log.onevent(function(event) {

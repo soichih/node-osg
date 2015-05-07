@@ -210,9 +210,9 @@ Workflow.prototype.cleanup = function(job) {
     delete this.submitted[job.id];
     this.submitted_count--;
 
-    if(this.submit_later.length > 0) {
-        var delayed = this.submit_later.shift();
-        console.log("submitting delayed job");
+    var delayed = this.submit_later.shift();
+    if(delayed) {
+        console.log("submitting delayed job (still remaining in later queue:"+this.submit_later.length+")");
         this.submit(delayed);
     }
 }

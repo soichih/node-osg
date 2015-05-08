@@ -406,16 +406,20 @@ Workflow.prototype.submit = function(options) {
             }
         }
         if(options.env) {
-            submit_options.environment = "";
+            submit_options.environment = "\"";
             for(var key in options.env) {
                 var value = options.env[key];
+                if(value.replace) value = value.replace(/\"/g, "\"\"");
                 var token = key+"="+value;
+                /*
                 if(token.indexOf("\"") !== -1) {
                     throw("double-quote mark handling is not yet supported. please avoid using double-quote: "+key+":"+value);
                 
                 }
-                submit_options.environment += "\""+token+"\" ";
+                */
+                submit_options.environment += token+" ";
             }
+            submit_options.environment += "\"";
         }
 
         //add some condor override
@@ -797,7 +801,7 @@ Workflow.prototype.removeall = function() {
 } 
 */
 
-Workflow.prototype.remove = function() {
+Workflow.prototype.remove = function(cb) {
     if(this.removed) {
         //workflow already removed - no reason to do this again
         return;
@@ -805,7 +809,7 @@ Workflow.prototype.remove = function() {
     this.removed = true;
 
     //console.log("aborting all jobs in this workflow with id:"+this.id);
-    htcondor.remove(['-constraint', 'node_osg_workflow_id=="'+this.id+'"']);
+    htcondor.remove({constraint:'node_osg_workflow_id=="'+this.id+'"'}, cb);
 
     //need to cleanup all jobs
     for(var id in this.submitted) {

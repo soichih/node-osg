@@ -8,8 +8,27 @@ describe('workflow', function() {
             debug: true
         }); 
         job.on('submit', function(info) {
+            console.log("job submitted. now removing");
+            job.remove(function(err) {
+                if(err) throw err;
+                done();
+            });
+        });
+    });
+
+    this.timeout(1000*60*3); //3 minutes enough?
+    it('should start', function(done) {
+        var job = workflow.submit({
+            executable: '/bin/sleep',
+            arguments: '30',
+            debug: true
+        }); 
+        job.on('execute', function(info) {
+            console.log("job started");
+        });
+        job.on('terminate', function(info) {
+            console.log("job successfully terminated");
             done();
-            job.remove();
         });
     });
 

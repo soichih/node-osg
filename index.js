@@ -448,7 +448,7 @@ Workflow.prototype.submit = function(options) {
                 }
 
                 //find callback to call
-                switch(event.MyType[0]) {
+                switch(event.MyType) {
                 /* start events are most likely already posted to joblog at the time we get here
                    so I don't *usually* get these events (tail can't rewind), although sometimes I get SubmitEvent
                    which is why I am sending my own submit event above.
@@ -767,7 +767,7 @@ Workflow.prototype.submit = function(options) {
                 case "ExecutableErrorEvent":
                 */
                 default:
-                    console.log("unknown event type:"+event.MyType[0]);
+                    console.log("unknown event type:"+event.MyType);
                 }
             });
         }).catch(function(err) {

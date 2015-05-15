@@ -16,7 +16,9 @@ describe('workflow', function() {
         });
     });
 
-    this.timeout(1000*60*3); //3 minutes enough?
+    this.timeout(1000*60*5); //3 minutes enough?
+
+    /*
     it('should start', function(done) {
         var job = workflow.submit({
             executable: '/bin/sleep',
@@ -29,6 +31,31 @@ describe('workflow', function() {
         job.on('terminate', function(info) {
             console.log("job successfully terminated");
             done();
+        });
+    });
+    */
+
+    it('should timeout', function(done) {
+        var job = workflow.submit({
+            executable: '/bin/sleep',
+            timeout: 15*1000,
+            arguments: '30',
+            "+PortalUser": 'test', //trick for xd-login
+            debug: true
+        }); 
+        job.on('execute', function(info) {
+            console.log("job started");
+        });
+        job.on('terminate', function(info) {
+            done(new Error("job terminated.. expected to timeout"));
+        });
+        job.on('hold', function(info) {
+            if(info.HoldReasonCode == 3) {
+                console.log("job held accordingly");
+                done();
+            } else {
+                done(new Error("holdreasoncode != 3"));
+            }
         });
     });
 
